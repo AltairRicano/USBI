@@ -1,0 +1,564 @@
+openapi: 3.0.3
+info:
+  title: USBI Platform API
+  description: |
+    API institucional del sistema USBI. Todos los errores usan RFC 7807 (Problem Details).
+    Todos los endpoints autenticados requieren JWT Bearer.
+  version: 1.0.0
+  license:
+    name: Apache 2.0
+    url: https://www.apache.org/licenses/LICENSE-2.0
+
+servers:
+  - url: https://api.usbi.edu.mx/api/v1
+    description: Servidor de producción (On-Premise, TLS 1.2+)
+
+security:
+  - bearerAuth: []
+
+paths:
+  /auth/register:
+    post:
+      summary: Registro de nuevo usuario
+      operationId: registerUser
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegisterRequestDTO'
+      responses:
+        '201':
+          description: Usuario creado. Pendiente de consentimiento de tutor si es menor.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RegisterResponseDTO'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /auth/login:
+    post:
+      summary: Inicio de sesión
+      operationId: loginUser
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequestDTO'
+      responses:
+        '200':
+          description: Login exitoso. Devuelve JWT firmado.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoginResponseDTO'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /auth/logout:
+    post:
+      summary: Cierre de sesión (invalida JWT via token_version)
+      operationId: logoutUser
+      responses:
+        '204':
+          description: Sesión cerrada. token_version incrementado en DB.
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /auth/tutor-consent:
+    post:
+      summary: Registro de consentimiento de tutor para usuarios menores
+      operationId: submitTutorConsent
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TutorConsentRequestDTO'
+      responses:
+        '201':
+          description: Consentimiento registrado con sello HMAC y evidencia legal.
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /auth/age-up:
+    post:
+      summary: Transición manual a mayoría de edad (Ley 251 — Self-Service)
+      operationId: ageUpTransition
+      description: |
+        Endpoint manual de auto-servicio. El usuario solicita explícitamente
+        la actualización de is_adult=true. Limitado a 3 intentos por cuenta,
+        rastreados en DB. NO se ejecuta como cron job.
+      responses:
+        '200':
+          description: Transición aceptada. is_adult actualizado.
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          description: Límite de 3 intentos excedido. Cuenta bloqueada para esta operación.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /sync:
+    post:
+      summary: Sincronización de progreso offline (idempotente)
+      operationId: syncOfflineProgress
+      description: |
+        Recibe progreso generado offline. Valida HMAC, aplica Additive Merge
+        con FOR UPDATE. Idempotente por sync_event_id (UUID). Si el UUID ya
+        existe, devuelve 200 OK sin duplicar XP.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SyncEventRequestDTO'
+      responses:
+        '200':
+          description: Sincronización exitosa o ya procesada (idempotente).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SyncEventResponseDTO'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          description: HMAC inválido. Posible intento de trampa detectado.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /arco:
+    post:
+      summary: Solicitud de Derechos ARCO (Acceso, Rectificación, Cancelación, Oposición)
+      operationId: submitArcoRequest
+      description: |
+        Registra una solicitud ARCO. Si el tipo es 'cancelacion', el backend
+        marcará wipe_local_data=true en la tabla devices para el usuario,
+        que será inyectado en la siguiente respuesta de sync.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ArcoRequestDTO'
+      responses:
+        '201':
+          description: Solicitud ARCO registrada con evidence_hash.
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /levels:
+    get:
+      summary: Listar secciones y niveles publicados
+      operationId: listLevels
+      parameters:
+        - in: query
+          name: section_id
+          schema:
+            type: string
+            format: uuid
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            default: 20
+            maximum: 100
+        - in: query
+          name: offset
+          schema:
+            type: integer
+            default: 0
+      responses:
+        '200':
+          description: Lista paginada de niveles publicados.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LevelListResponseDTO'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+    post:
+      summary: Crear nivel oficial (sólo admin/operator/director)
+      operationId: createLevel
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateLevelRequestDTO'
+      responses:
+        '201':
+          description: Nivel creado en PostgreSQL.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LevelDTO'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: JWT firmado con HS256. Incluye user_id, role y token_version.
+
+  schemas:
+    # ── Auth ──────────────────────────────────────────────────────────────────
+    RegisterRequestDTO:
+      type: object
+      required: [full_name, email, password, is_adult, privacy_notice_version]
+      properties:
+        full_name:
+          type: string
+          minLength: 2
+          maxLength: 120
+        email:
+          type: string
+          format: email
+        phone:
+          type: string
+        password:
+          type: string
+          minLength: 8
+        is_adult:
+          type: boolean
+        privacy_notice_version:
+          type: string
+
+    RegisterResponseDTO:
+      type: object
+      properties:
+        user_id:
+          type: string
+          format: uuid
+        status:
+          type: string
+          enum: [active, pending_tutor_consent]
+        message:
+          type: string
+
+    LoginRequestDTO:
+      type: object
+      required: [email, password]
+      properties:
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+
+    LoginResponseDTO:
+      type: object
+      properties:
+        access_token:
+          type: string
+          description: JWT firmado. Almacenar EXCLUSIVAMENTE en Tauri Plugin Store, nunca en window.
+        token_type:
+          type: string
+          enum: [Bearer]
+        user:
+          $ref: '#/components/schemas/UserDTO'
+
+    TutorConsentRequestDTO:
+      type: object
+      required: [user_id, tutor_name, tutor_email, privacy_notice_version]
+      properties:
+        user_id:
+          type: string
+          format: uuid
+        tutor_name:
+          type: string
+        tutor_email:
+          type: string
+          format: email
+        privacy_notice_version:
+          type: string
+
+    # ── User ──────────────────────────────────────────────────────────────────
+    UserDTO:
+      type: object
+      description: DTO público. Excluye campos criptográficos y hashes internos.
+      properties:
+        id:
+          type: string
+          format: uuid
+        full_name:
+          type: string
+        is_adult:
+          type: boolean
+        role:
+          type: string
+          enum: [player, admin, operator, director]
+        status:
+          type: string
+          enum: [active, suspended, pending_tutor_consent, deleted]
+        created_at:
+          type: string
+          format: date-time
+
+    # ── Sync ──────────────────────────────────────────────────────────────────
+    SyncPayloadDTO:
+      type: object
+      description: |
+        Paquete de progreso offline. NO debe contener nombre, correo, teléfono
+        ni datos personales identificables. Sólo eventos técnicos de progreso.
+      required: [level_attempts]
+      properties:
+        level_attempts:
+          type: array
+          items:
+            $ref: '#/components/schemas/LevelAttemptPayloadItem'
+        daily_streak_dates:
+          type: array
+          description: Fechas de actividad (ISO 8601) para fusión de racha diaria.
+          items:
+            type: string
+            format: date
+        badge_ids_earned:
+          type: array
+          description: IDs de insignias ganadas offline para fusión por unión.
+          items:
+            type: string
+            format: uuid
+
+    LevelAttemptPayloadItem:
+      type: object
+      required: [level_id, attempt_date, attempt_number, xp_awarded, completed]
+      properties:
+        level_id:
+          type: string
+          format: uuid
+        attempt_date:
+          type: string
+          format: date
+        attempt_number:
+          type: integer
+          minimum: 1
+        xp_awarded:
+          type: integer
+          minimum: 0
+          description: XP calculada localmente. El backend RECALCULARÁ este valor con FOR UPDATE. No se confía en este campo.
+        completed:
+          type: boolean
+
+    SyncEventRequestDTO:
+      type: object
+      required: [sync_event_id, user_id, device_id, payload, hmac_signature, crypto_key_version]
+      properties:
+        sync_event_id:
+          type: string
+          format: uuid
+          description: UUID generado por el cliente. Garantiza idempotencia.
+        user_id:
+          type: string
+          format: uuid
+        device_id:
+          type: string
+          format: uuid
+        crypto_key_version:
+          type: integer
+          description: Versión del keyring HMAC usado para firmar.
+        payload:
+          $ref: '#/components/schemas/SyncPayloadDTO'
+        hmac_signature:
+          type: string
+          format: byte
+          description: HMAC-SHA256 de concat(user_id, xp_total, timestamp_unix). Base64.
+
+    SyncEventResponseDTO:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [synced, already_processed]
+        wipe_local_data:
+          type: boolean
+          description: |
+            Si true, el frontend DEBE ejecutar DROP/DELETE sobre la base de datos
+            SQLite local para cumplir con Derechos ARCO (Cancelación).
+        server_xp_total:
+          type: integer
+          description: XP total en servidor post-merge para validación en cliente.
+
+    # ── ARCO ──────────────────────────────────────────────────────────────────
+    ArcoRequestDTO:
+      type: object
+      required: [request_type]
+      properties:
+        request_type:
+          type: string
+          enum: [acceso, rectificacion, cancelacion, oposicion]
+        details:
+          type: string
+          maxLength: 1000
+
+    # ── Levels ────────────────────────────────────────────────────────────────
+    LevelDTO:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        section_id:
+          type: string
+          format: uuid
+        title:
+          type: string
+        color:
+          type: string
+        template_type:
+          type: string
+        difficulty:
+          type: integer
+          minimum: 1
+          maximum: 10
+        is_published:
+          type: boolean
+
+    CreateLevelRequestDTO:
+      type: object
+      required: [section_id, title, color, template_type, content, difficulty]
+      properties:
+        section_id:
+          type: string
+          format: uuid
+        title:
+          type: string
+        color:
+          type: string
+        template_type:
+          type: string
+        content:
+          type: object
+          description: Estructura JSON validada por Zod en packages/schema. Máx 5MB (RF36).
+        difficulty:
+          type: integer
+          minimum: 1
+          maximum: 10
+
+    LevelListResponseDTO:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/LevelDTO'
+        total:
+          type: integer
+        limit:
+          type: integer
+        offset:
+          type: integer
+
+    # ── RFC 7807 ──────────────────────────────────────────────────────────────
+    ProblemDetails:
+      type: object
+      description: RFC 7807 Problem Details for HTTP APIs
+      required: [type, title, status]
+      properties:
+        type:
+          type: string
+          format: uri
+          example: https://api.usbi.edu.mx/errors/validation-error
+        title:
+          type: string
+          example: Validation Error
+        status:
+          type: integer
+          example: 400
+        detail:
+          type: string
+          example: El campo email es requerido.
+        instance:
+          type: string
+          format: uri
+          example: /api/v1/auth/login
+
+  responses:
+    BadRequest:
+      description: Solicitud inválida
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/ProblemDetails'
+    Unauthorized:
+      description: No autenticado o JWT expirado/invalidado
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/ProblemDetails'
+    Forbidden:
+      description: Sin permisos para este recurso
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/ProblemDetails'
+    NotFound:
+      description: Recurso no encontrado
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/ProblemDetails'
+    Conflict:
+      description: Conflicto de estado (ej. UUID duplicado, email ya registrado)
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/ProblemDetails'
+    InternalServerError:
+      description: Error interno del servidor
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/ProblemDetails'

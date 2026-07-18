@@ -8,16 +8,11 @@ import (
 	"github.com/altair/usbi-backend/internal/auth"
 	"github.com/altair/usbi-backend/internal/crypto"
 	"github.com/altair/usbi-backend/internal/domain"
+	"github.com/altair/usbi-backend/internal/repository"
 	syncHandler "github.com/altair/usbi-backend/internal/sync"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 )
-
-// contextKey is an unexported type for context keys to avoid collisions
-// with other packages that use context.WithValue.
-type contextKey string
-
-const claimsKey contextKey = "jwt_claims"
 
 // RouterDependencies holds all handler and config dependencies.
 // All fields are required for full Phase 2 functionality.
@@ -25,6 +20,7 @@ type RouterDependencies struct {
 	AuthHandler *auth.Handler
 	SyncHandler *syncHandler.Handler
 	TokenCfg    crypto.TokenConfig
+	Queries     *repository.Queries
 	// AllowedOrigin is the CORS Allow-Origin value.
 	// Defaults to "https://usbi.edu.mx" if empty.
 	AllowedOrigin string
@@ -33,7 +29,7 @@ type RouterDependencies struct {
 // ClaimsFromContext extracts the JWT claims injected by jwtAuthMiddleware.
 // Returns nil if no claims are present (public route or missing middleware).
 func ClaimsFromContext(ctx context.Context) *domain.JWTClaims {
-	if v := ctx.Value(claimsKey); v != nil {
+	if v := ctx.Value(domain.ClaimsKey); v != nil {
 		if c, ok := v.(*domain.JWTClaims); ok {
 			return c
 		}
@@ -70,11 +66,17 @@ func SetupRoutes(r chi.Router, deps RouterDependencies) {
 
 		// ── Authenticated routes ──────────────────────────────────────────────
 		r.Group(func(r chi.Router) {
-			r.Use(jwtAuthMiddleware(deps.TokenCfg))
+			r.Use(jwtAuthMiddleware(deps.TokenCfg, deps.Queries))
 
-			r.Post("/auth/logout", notImplementedHandler("auth.logout"))
-			r.Post("/auth/age-up", notImplementedHandler("auth.ageUp"))
-			r.Post("/arco", notImplementedHandler("arco.submitRequest"))
+			if deps.AuthHandler != nil {
+				r.Post("/auth/logout", deps.AuthHandler.Logout)
+				r.Post("/auth/age-up", deps.AuthHandler.AgeUp)
+				r.Post("/arco", deps.AuthHandler.Arco)
+			} else {
+				r.Post("/auth/logout", notImplementedHandler("auth.logout"))
+				r.Post("/auth/age-up", notImplementedHandler("auth.ageUp"))
+				r.Post("/arco", notImplementedHandler("arco.submitRequest"))
+			}
 
 			if deps.SyncHandler != nil {
 				r.Post("/sync", deps.SyncHandler.SyncData)
@@ -128,10 +130,7 @@ func corsMiddleware(allowedOrigin string) func(http.Handler) http.Handler {
 
 // jwtAuthMiddleware validates the JWT and injects claims into the request context.
 // Downstream handlers retrieve claims via ClaimsFromContext(r.Context()).
-//
-// NOTE: token_version database check (revocation) is the next step in this middleware.
-// Until the database connection is wired here, logout invalidation is advisory only.
-func jwtAuthMiddleware(cfg crypto.TokenConfig) func(http.Handler) http.Handler {
+func jwtAuthMiddleware(cfg crypto.TokenConfig, queries *repository.Queries) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			authHeader := r.Header.Get("Authorization")
@@ -157,8 +156,19 @@ func jwtAuthMiddleware(cfg crypto.TokenConfig) func(http.Handler) http.Handler {
 				return
 			}
 
+			// Verify token_version against the database if queries is provided.
+			// This enables immediate token revocation on logout/password change.
+			if queries != nil {
+				dbVersion, err := queries.GetUserTokenVersion(r.Context(), claims.UserID)
+				if err != nil || int(dbVersion) != claims.TokenVersion {
+					writeProblem(w, r, http.StatusUnauthorized, "unauthorized",
+						"Unauthorized", "Token has been revoked or is invalid")
+					return
+				}
+			}
+
 			// Inject claims into context for downstream handlers.
-			ctx := context.WithValue(r.Context(), claimsKey, claims)
+			ctx := context.WithValue(r.Context(), domain.ClaimsKey, claims)
 			next.ServeHTTP(w, r.WithContext(ctx))
 		})
 	}

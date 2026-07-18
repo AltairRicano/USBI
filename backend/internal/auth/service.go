@@ -186,6 +186,70 @@ func (s *Service) Login(ctx context.Context, req LoginRequest) (LoginResponse, e
 	}, nil
 }
 
+// Logout increments the user's token_version, invalidating all their current JWTs.
+func (s *Service) Logout(ctx context.Context, userID uuid.UUID) error {
+	if userID == uuid.Nil {
+		return ErrValidation
+	}
+	err := s.queries.IncrementTokenVersion(ctx, userID)
+	if err != nil {
+		return fmt.Errorf("incrementing token_version: %w", err)
+	}
+	return nil
+}
+
+// AgeUp attempts to transition a user from pending_tutor_consent to active.
+func (s *Service) AgeUp(ctx context.Context, userID uuid.UUID) error {
+	if userID == uuid.Nil {
+		return ErrValidation
+	}
+	
+	attempts, err := s.queries.IncrementAgeUpAttempts(ctx, userID)
+	if err != nil {
+		return fmt.Errorf("incrementing age_up_attempts: %w", err)
+	}
+	
+	if attempts > 3 {
+		return errors.New("maximum age-up attempts exceeded")
+	}
+
+	err = s.queries.UpdateUserAdultStatus(ctx, userID)
+	if err != nil {
+		return fmt.Errorf("updating user adult status: %w", err)
+	}
+	
+	return nil
+}
+
+// SubmitArcoRequest records an ARCO request from the user.
+func (s *Service) SubmitArcoRequest(ctx context.Context, userID uuid.UUID, req ArcoRequestDTO) error {
+	if userID == uuid.Nil {
+		return ErrValidation
+	}
+	
+	// Create the cryptographic seal for No-Repudio
+	payload := []byte(userID.String() + "|" + string(req.RequestType) + "|" + req.Details)
+	evidenceHash := crypto.GenerateHMAC(payload, s.cfg.HMACSecret)
+
+	// Since database schema allows NULL for user_id to preserve record after deletion,
+	// sqlc generated user_id as pgtype.UUID or uuid.NullUUID.
+	// sqlc uses pgtype by default in v2 unless configured otherwise. Let's check repository types.
+	// Actually we should just pass it, assuming repository.InsertArcoRequestParams has UserID: uuid.NullUUID.
+	err := s.queries.InsertArcoRequest(ctx, repository.InsertArcoRequestParams{
+		ID:            uuid.New(),
+		UserID:        uuid.NullUUID{UUID: userID, Valid: true},
+		RequesterType: "user",
+		RequestType:   string(req.RequestType),
+		Status:        "pending",
+		EvidenceHash:  evidenceHash,
+	})
+	if err != nil {
+		return fmt.Errorf("inserting arco request: %w", err)
+	}
+
+	return nil
+}
+
 // ── Validation helpers ────────────────────────────────────────────────────────
 
 func validateRegister(req RegisterRequest) error {

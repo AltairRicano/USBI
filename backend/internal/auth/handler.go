@@ -78,6 +78,72 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, resp)
 }
 
+// Logout handles POST /api/v1/auth/logout.
+func (h *Handler) Logout(w http.ResponseWriter, r *http.Request) {
+	claims, ok := r.Context().Value(domain.ClaimsKey).(*domain.JWTClaims)
+	if !ok {
+		writeProblem(w, r, http.StatusUnauthorized, "unauthorized",
+			"Unauthorized", "Missing JWT claims in context")
+		return
+	}
+
+	if err := h.svc.Logout(r.Context(), claims.UserID); err != nil {
+		writeProblem(w, r, http.StatusInternalServerError, "internal-error",
+			"Internal Server Error", "Could not process logout")
+		return
+	}
+
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// AgeUp handles POST /api/v1/auth/age-up.
+func (h *Handler) AgeUp(w http.ResponseWriter, r *http.Request) {
+	claims, ok := r.Context().Value(domain.ClaimsKey).(*domain.JWTClaims)
+	if !ok {
+		writeProblem(w, r, http.StatusUnauthorized, "unauthorized",
+			"Unauthorized", "Missing JWT claims in context")
+		return
+	}
+
+	if err := h.svc.AgeUp(r.Context(), claims.UserID); err != nil {
+		if err.Error() == "maximum age-up attempts exceeded" {
+			writeProblem(w, r, http.StatusTooManyRequests, "too-many-requests",
+				"Too Many Requests", err.Error())
+			return
+		}
+		writeProblem(w, r, http.StatusInternalServerError, "internal-error",
+			"Internal Server Error", "Could not process age-up request")
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]string{"status": "success", "message": "User adult status updated"})
+}
+
+// Arco handles POST /api/v1/arco.
+func (h *Handler) Arco(w http.ResponseWriter, r *http.Request) {
+	claims, ok := r.Context().Value(domain.ClaimsKey).(*domain.JWTClaims)
+	if !ok {
+		writeProblem(w, r, http.StatusUnauthorized, "unauthorized",
+			"Unauthorized", "Missing JWT claims in context")
+		return
+	}
+
+	var req ArcoRequestDTO
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeProblem(w, r, http.StatusBadRequest, "bad-request",
+			"Bad Request", "Invalid JSON body")
+		return
+	}
+
+	if err := h.svc.SubmitArcoRequest(r.Context(), claims.UserID, req); err != nil {
+		writeProblem(w, r, http.StatusInternalServerError, "internal-error",
+			"Internal Server Error", "Could not submit ARCO request")
+		return
+	}
+
+	writeJSON(w, http.StatusCreated, map[string]string{"status": "pending", "message": "ARCO request submitted successfully"})
+}
+
 // ── Internal helpers ──────────────────────────────────────────────────────────
 
 // writeProblem emits an RFC 7807 application/problem+json response.

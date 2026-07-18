@@ -169,6 +169,66 @@ func (q *Queries) GetUserByEmailHash(ctx context.Context, arg GetUserByEmailHash
 	return i, err
 }
 
+const getUserTokenVersion = `-- name: GetUserTokenVersion :one
+SELECT token_version FROM users WHERE id = $1 AND deleted_at IS NULL
+`
+
+func (q *Queries) GetUserTokenVersion(ctx context.Context, id uuid.UUID) (int32, error) {
+	row := q.db.QueryRowContext(ctx, getUserTokenVersion, id)
+	var token_version int32
+	err := row.Scan(&token_version)
+	return token_version, err
+}
+
+const incrementAgeUpAttempts = `-- name: IncrementAgeUpAttempts :one
+UPDATE users SET age_up_attempts = age_up_attempts + 1, updated_at = NOW() WHERE id = $1 RETURNING age_up_attempts
+`
+
+func (q *Queries) IncrementAgeUpAttempts(ctx context.Context, id uuid.UUID) (int16, error) {
+	row := q.db.QueryRowContext(ctx, incrementAgeUpAttempts, id)
+	var age_up_attempts int16
+	err := row.Scan(&age_up_attempts)
+	return age_up_attempts, err
+}
+
+const incrementTokenVersion = `-- name: IncrementTokenVersion :exec
+UPDATE users SET token_version = token_version + 1, updated_at = NOW() WHERE id = $1
+`
+
+func (q *Queries) IncrementTokenVersion(ctx context.Context, id uuid.UUID) error {
+	_, err := q.db.ExecContext(ctx, incrementTokenVersion, id)
+	return err
+}
+
+const insertArcoRequest = `-- name: InsertArcoRequest :exec
+INSERT INTO arco_requests (
+    id, user_id, requester_type, request_type, status, evidence_hash
+) VALUES (
+    $1, $2, $3, $4, $5, $6
+)
+`
+
+type InsertArcoRequestParams struct {
+	ID            uuid.UUID     `json:"id"`
+	UserID        uuid.NullUUID `json:"user_id"`
+	RequesterType string        `json:"requester_type"`
+	RequestType   string        `json:"request_type"`
+	Status        string        `json:"status"`
+	EvidenceHash  []byte        `json:"evidence_hash"`
+}
+
+func (q *Queries) InsertArcoRequest(ctx context.Context, arg InsertArcoRequestParams) error {
+	_, err := q.db.ExecContext(ctx, insertArcoRequest,
+		arg.ID,
+		arg.UserID,
+		arg.RequesterType,
+		arg.RequestType,
+		arg.Status,
+		arg.EvidenceHash,
+	)
+	return err
+}
+
 const insertExperienceHistory = `-- name: InsertExperienceHistory :exec
 INSERT INTO experience_history (
     id, user_id, level_id, event_type, xp_gained, source, verification_method, sync_event_id
@@ -312,6 +372,15 @@ type UpdateSyncEventStatusParams struct {
 
 func (q *Queries) UpdateSyncEventStatus(ctx context.Context, arg UpdateSyncEventStatusParams) error {
 	_, err := q.db.ExecContext(ctx, updateSyncEventStatus, arg.ID, arg.Status)
+	return err
+}
+
+const updateUserAdultStatus = `-- name: UpdateUserAdultStatus :exec
+UPDATE users SET is_adult = true, status = 'active', updated_at = NOW() WHERE id = $1
+`
+
+func (q *Queries) UpdateUserAdultStatus(ctx context.Context, id uuid.UUID) error {
+	_, err := q.db.ExecContext(ctx, updateUserAdultStatus, id)
 	return err
 }
 

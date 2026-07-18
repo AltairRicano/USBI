@@ -6,17 +6,24 @@ package repository
 
 import (
 	"context"
+
+	"github.com/google/uuid"
 )
 
 type Querier interface {
 	CreateUser(ctx context.Context, arg CreateUserParams) (User, error)
 	GetLevelAttemptsByDate(ctx context.Context, arg GetLevelAttemptsByDateParams) (int64, error)
 	GetUserByEmailHash(ctx context.Context, arg GetUserByEmailHashParams) (GetUserByEmailHashRow, error)
+	GetUserTokenVersion(ctx context.Context, id uuid.UUID) (int32, error)
+	IncrementAgeUpAttempts(ctx context.Context, id uuid.UUID) (int16, error)
+	IncrementTokenVersion(ctx context.Context, id uuid.UUID) error
+	InsertArcoRequest(ctx context.Context, arg InsertArcoRequestParams) error
 	InsertExperienceHistory(ctx context.Context, arg InsertExperienceHistoryParams) error
 	InsertLevelAttempt(ctx context.Context, arg InsertLevelAttemptParams) error
 	InsertSyncEvent(ctx context.Context, arg InsertSyncEventParams) error
 	LogAdminAudit(ctx context.Context, arg LogAdminAuditParams) error
 	UpdateSyncEventStatus(ctx context.Context, arg UpdateSyncEventStatusParams) error
+	UpdateUserAdultStatus(ctx context.Context, id uuid.UUID) error
 	UpsertDailyStreak(ctx context.Context, arg UpsertDailyStreakParams) error
 	UpsertPlayerProgress(ctx context.Context, arg UpsertPlayerProgressParams) error
 }

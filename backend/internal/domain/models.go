@@ -121,3 +121,11 @@ type ArcoRequest struct {
 	RequestType ArcoRequestType `json:"request_type"`
 	Details     string          `json:"details,omitempty"`
 }
+
+// ContextKey is an unexported type for context keys to avoid collisions
+// with other packages that use context.WithValue.
+type ContextKey string
+
+// ClaimsKey is the context key for storing JWT claims in the request context.
+const ClaimsKey ContextKey = "jwt_claims"
+

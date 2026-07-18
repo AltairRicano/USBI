@@ -84,6 +84,7 @@ func main() {
 		AuthHandler:   auth.NewHandler(authSvc),
 		SyncHandler:   syncSvc.NewHandler(syncService),
 		TokenCfg:      tokenCfg,
+		Queries:       queries,
 		AllowedOrigin: allowedOrigin,
 	})
 

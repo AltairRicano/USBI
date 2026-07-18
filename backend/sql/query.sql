@@ -65,3 +65,22 @@ INSERT INTO sync_events (
 
 -- name: UpdateSyncEventStatus :exec
 UPDATE sync_events SET status = $2, processed_at = NOW() WHERE id = $1;
+
+-- name: GetUserTokenVersion :one
+SELECT token_version FROM users WHERE id = $1 AND deleted_at IS NULL;
+
+-- name: IncrementTokenVersion :exec
+UPDATE users SET token_version = token_version + 1, updated_at = NOW() WHERE id = $1;
+
+-- name: IncrementAgeUpAttempts :one
+UPDATE users SET age_up_attempts = age_up_attempts + 1, updated_at = NOW() WHERE id = $1 RETURNING age_up_attempts;
+
+-- name: UpdateUserAdultStatus :exec
+UPDATE users SET is_adult = true, status = 'active', updated_at = NOW() WHERE id = $1;
+
+-- name: InsertArcoRequest :exec
+INSERT INTO arco_requests (
+    id, user_id, requester_type, request_type, status, evidence_hash
+) VALUES (
+    $1, $2, $3, $4, $5, $6
+);

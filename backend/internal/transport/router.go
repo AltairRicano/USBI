@@ -1,111 +1,178 @@
 package transport
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 
+	"github.com/altair/usbi-backend/internal/auth"
+	"github.com/altair/usbi-backend/internal/crypto"
 	"github.com/altair/usbi-backend/internal/domain"
+	syncHandler "github.com/altair/usbi-backend/internal/sync"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 )
 
+// contextKey is an unexported type for context keys to avoid collisions
+// with other packages that use context.WithValue.
+type contextKey string
+
+const claimsKey contextKey = "jwt_claims"
+
+// RouterDependencies holds all handler and config dependencies.
+// All fields are required for full Phase 2 functionality.
+type RouterDependencies struct {
+	AuthHandler *auth.Handler
+	SyncHandler *syncHandler.Handler
+	TokenCfg    crypto.TokenConfig
+	// AllowedOrigin is the CORS Allow-Origin value.
+	// Defaults to "https://usbi.edu.mx" if empty.
+	AllowedOrigin string
+}
+
+// ClaimsFromContext extracts the JWT claims injected by jwtAuthMiddleware.
+// Returns nil if no claims are present (public route or missing middleware).
+func ClaimsFromContext(ctx context.Context) *domain.JWTClaims {
+	if v := ctx.Value(claimsKey); v != nil {
+		if c, ok := v.(*domain.JWTClaims); ok {
+			return c
+		}
+	}
+	return nil
+}
+
 // SetupRoutes registers all HTTP routes with their middleware chain.
-// Auth middleware is applied at the group level; public routes are excluded.
-func SetupRoutes(r chi.Router) {
+func SetupRoutes(r chi.Router, deps RouterDependencies) {
+	origin := deps.AllowedOrigin
+	if origin == "" {
+		origin = "https://usbi.edu.mx"
+	}
+
 	// Global middleware stack
 	r.Use(middleware.RequestID)
 	r.Use(middleware.RealIP)
 	r.Use(middleware.Logger)
 	r.Use(middleware.Recoverer)
-	r.Use(corsMiddleware)
+	r.Use(corsMiddleware(origin))
 
 	r.Route("/api/v1", func(r chi.Router) {
-		// ── Public routes (no JWT required) ──────────────────────────────────
+		// ── Public routes ─────────────────────────────────────────────────────
 		r.Group(func(r chi.Router) {
-			r.Post("/auth/register", notImplementedHandler("auth.register"))
-			r.Post("/auth/login", notImplementedHandler("auth.login"))
+			if deps.AuthHandler != nil {
+				r.Post("/auth/register", deps.AuthHandler.Register)
+				r.Post("/auth/login", deps.AuthHandler.Login)
+			} else {
+				r.Post("/auth/register", notImplementedHandler("auth.register"))
+				r.Post("/auth/login", notImplementedHandler("auth.login"))
+			}
 			r.Post("/auth/tutor-consent", notImplementedHandler("auth.tutorConsent"))
 		})
 
-		// ── Authenticated routes (JWT required) ───────────────────────────────
+		// ── Authenticated routes ──────────────────────────────────────────────
 		r.Group(func(r chi.Router) {
-			r.Use(jwtAuthMiddleware)
+			r.Use(jwtAuthMiddleware(deps.TokenCfg))
 
 			r.Post("/auth/logout", notImplementedHandler("auth.logout"))
 			r.Post("/auth/age-up", notImplementedHandler("auth.ageUp"))
-			r.Post("/sync", notImplementedHandler("sync.offlineProgress"))
 			r.Post("/arco", notImplementedHandler("arco.submitRequest"))
 
-			// Level routes
+			if deps.SyncHandler != nil {
+				r.Post("/sync", deps.SyncHandler.SyncData)
+			} else {
+				r.Post("/sync", notImplementedHandler("sync.offlineProgress"))
+			}
+
+			// Level routes (Phase 4 — Maker module)
 			r.Get("/levels", notImplementedHandler("levels.list"))
 			r.Post("/levels", notImplementedHandler("levels.create"))
 		})
 	})
 
-	// Health check — no auth, no versioning
+	// Health check — unauthenticated, unversioned
 	r.Get("/health", healthHandler)
 }
 
-// healthHandler is a simple liveness probe endpoint.
+// healthHandler returns a simple liveness probe response.
 func healthHandler(w http.ResponseWriter, _ *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	_, _ = w.Write([]byte(`{"status":"ok","service":"usbi-backend"}`))
 }
 
-// notImplementedHandler returns a 501 stub for routes pending Phase 2 implementation.
-// This makes routing discoverable and testable before business logic is wired.
+// notImplementedHandler returns a 501 stub for routes pending implementation.
 func notImplementedHandler(operation string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		writeProblem(w, http.StatusNotImplemented, domain.ProblemDetails{
-			Type:     "https://api.usbi.edu.mx/errors/not-implemented",
-			Title:    "Not Implemented",
-			Status:   http.StatusNotImplemented,
-			Detail:   "Operation '" + operation + "' is pending Phase 2 implementation.",
-			Instance: r.URL.Path,
+		writeProblem(w, r, http.StatusNotImplemented, "not-implemented",
+			"Not Implemented",
+			"Operation '"+operation+"' is pending implementation.")
+	}
+}
+
+// corsMiddleware applies CORS headers. The origin is configurable to support
+// both production (https://usbi.edu.mx) and local LAN development.
+func corsMiddleware(allowedOrigin string) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Access-Control-Allow-Origin", allowedOrigin)
+			w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+			w.Header().Set("Access-Control-Allow-Headers", "Authorization, Content-Type, X-Request-ID")
+			w.Header().Set("Access-Control-Max-Age", "86400")
+			if r.Method == http.MethodOptions {
+				w.WriteHeader(http.StatusNoContent)
+				return
+			}
+			next.ServeHTTP(w, r)
 		})
 	}
 }
 
-// corsMiddleware applies strict CORS headers.
-// Origins must be tightened to specific domains before production.
-func corsMiddleware(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Access-Control-Allow-Origin", "https://usbi.edu.mx")
-		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
-		w.Header().Set("Access-Control-Allow-Headers", "Authorization, Content-Type, X-Request-ID")
-		if r.Method == http.MethodOptions {
-			w.WriteHeader(http.StatusNoContent)
-			return
-		}
-		next.ServeHTTP(w, r)
-	})
+// jwtAuthMiddleware validates the JWT and injects claims into the request context.
+// Downstream handlers retrieve claims via ClaimsFromContext(r.Context()).
+//
+// NOTE: token_version database check (revocation) is the next step in this middleware.
+// Until the database connection is wired here, logout invalidation is advisory only.
+func jwtAuthMiddleware(cfg crypto.TokenConfig) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			authHeader := r.Header.Get("Authorization")
+			if len(authHeader) < 8 || authHeader[:7] != "Bearer " {
+				writeProblem(w, r, http.StatusUnauthorized, "unauthorized",
+					"Unauthorized", "Missing or malformed Authorization header")
+				return
+			}
+
+			tokenStr := authHeader[7:]
+
+			// Reject if JWT secret is not configured (zero-value cfg).
+			if len(cfg.Secret) == 0 {
+				writeProblem(w, r, http.StatusServiceUnavailable, "misconfigured",
+					"Service Unavailable", "Authentication service is not configured")
+				return
+			}
+
+			claims, err := crypto.ValidateToken(tokenStr, cfg)
+			if err != nil {
+				writeProblem(w, r, http.StatusUnauthorized, "unauthorized",
+					"Unauthorized", "Invalid or expired token")
+				return
+			}
+
+			// Inject claims into context for downstream handlers.
+			ctx := context.WithValue(r.Context(), claimsKey, claims)
+			next.ServeHTTP(w, r.WithContext(ctx))
+		})
+	}
 }
 
-// jwtAuthMiddleware is a placeholder for the JWT validation middleware.
-// Full implementation (token_version check against DB) goes in Phase 2.
-func jwtAuthMiddleware(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		authHeader := r.Header.Get("Authorization")
-		if authHeader == "" || len(authHeader) < 8 || authHeader[:7] != "Bearer " {
-			writeProblem(w, http.StatusUnauthorized, domain.ProblemDetails{
-				Type:     "https://api.usbi.edu.mx/errors/unauthorized",
-				Title:    "Unauthorized",
-				Status:   http.StatusUnauthorized,
-				Detail:   "Missing or malformed Authorization header.",
-				Instance: r.URL.Path,
-			})
-			return
-		}
-		// TODO Phase 2: parse JWT, validate token_version against DB,
-		// inject JWTClaims into request context.
-		next.ServeHTTP(w, r)
-	})
-}
-
-// writeProblem serializes a ProblemDetails as RFC 7807 (application/problem+json).
-func writeProblem(w http.ResponseWriter, status int, p domain.ProblemDetails) {
+// writeProblem emits an RFC 7807 application/problem+json response.
+func writeProblem(w http.ResponseWriter, r *http.Request, status int, slug, title, detail string) {
 	w.Header().Set("Content-Type", "application/problem+json")
 	w.WriteHeader(status)
-	_ = json.NewEncoder(w).Encode(p)
+	_ = json.NewEncoder(w).Encode(domain.ProblemDetails{
+		Type:     "https://api.usbi.edu.mx/errors/" + slug,
+		Title:    title,
+		Status:   status,
+		Detail:   detail,
+		Instance: r.URL.Path,
+	})
 }

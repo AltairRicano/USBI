@@ -1,12 +1,13 @@
 -- name: GetUserByEmailHash :one
-SELECT * FROM users
+SELECT id, full_name, pgp_sym_decrypt(email::bytea, sqlc.arg('encryption_key')::text) as email, email_lookup_hash, phone, phone_lookup_hash, password_hash, token_version, is_adult, role, privacy_notice_version, privacy_notice_accepted_at, privacy_acceptance_hash, crypto_key_version, status, age_up_attempts, created_at, updated_at, last_login_at, deleted_at, deletion_reason 
+FROM users
 WHERE email_lookup_hash = $1 AND deleted_at IS NULL;
 
 -- name: CreateUser :one
 INSERT INTO users (
     id, full_name, email, email_lookup_hash, password_hash, token_version, is_adult, role, privacy_notice_version, privacy_notice_accepted_at, privacy_acceptance_hash, crypto_key_version, status
 ) VALUES (
-    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13
+    $1, $2, pgp_sym_encrypt($3::text, sqlc.arg('encryption_key')::text), $4, $5, $6, $7, $8, $9, $10, $11, $12, $13
 )
 RETURNING *;
 

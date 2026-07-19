@@ -8,12 +8,75 @@ package repository
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"net"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/sqlc-dev/pqtype"
 )
+
+const createLevel = `-- name: CreateLevel :exec
+INSERT INTO levels (
+    id, section_id, title, color, template_type, content, difficulty, is_published, created_by_admin_id
+) VALUES (
+    $1, $2, $3, $4, $5, $6, $7, $8, $9
+)
+`
+
+type CreateLevelParams struct {
+	ID               uuid.UUID       `json:"id"`
+	SectionID        uuid.UUID       `json:"section_id"`
+	Title            string          `json:"title"`
+	Color            string          `json:"color"`
+	TemplateType     string          `json:"template_type"`
+	Content          json.RawMessage `json:"content"`
+	Difficulty       int32           `json:"difficulty"`
+	IsPublished      bool            `json:"is_published"`
+	CreatedByAdminID uuid.NullUUID   `json:"created_by_admin_id"`
+}
+
+func (q *Queries) CreateLevel(ctx context.Context, arg CreateLevelParams) error {
+	_, err := q.db.ExecContext(ctx, createLevel,
+		arg.ID,
+		arg.SectionID,
+		arg.Title,
+		arg.Color,
+		arg.TemplateType,
+		arg.Content,
+		arg.Difficulty,
+		arg.IsPublished,
+		arg.CreatedByAdminID,
+	)
+	return err
+}
+
+const createSection = `-- name: CreateSection :exec
+INSERT INTO sections (
+    id, title, color, is_published, created_by_admin_id
+) VALUES (
+    $1, $2, $3, $4, $5
+)
+`
+
+type CreateSectionParams struct {
+	ID               uuid.UUID     `json:"id"`
+	Title            string        `json:"title"`
+	Color            string        `json:"color"`
+	IsPublished      bool          `json:"is_published"`
+	CreatedByAdminID uuid.NullUUID `json:"created_by_admin_id"`
+}
+
+func (q *Queries) CreateSection(ctx context.Context, arg CreateSectionParams) error {
+	_, err := q.db.ExecContext(ctx, createSection,
+		arg.ID,
+		arg.Title,
+		arg.Color,
+		arg.IsPublished,
+		arg.CreatedByAdminID,
+	)
+	return err
+}
 
 const createUser = `-- name: CreateUser :one
 INSERT INTO users (
@@ -324,6 +387,60 @@ func (q *Queries) InsertSyncEvent(ctx context.Context, arg InsertSyncEventParams
 		arg.Status,
 	)
 	return err
+}
+
+const listPublishedLevels = `-- name: ListPublishedLevels :many
+SELECT id, section_id, title, color, template_type, difficulty, created_at
+FROM levels
+WHERE is_published = true AND (id > $1 OR $1 = '00000000-0000-0000-0000-000000000000'::uuid)
+ORDER BY id ASC
+LIMIT $2
+`
+
+type ListPublishedLevelsParams struct {
+	Cursor   uuid.UUID `json:"cursor"`
+	PageSize int32     `json:"page_size"`
+}
+
+type ListPublishedLevelsRow struct {
+	ID           uuid.UUID `json:"id"`
+	SectionID    uuid.UUID `json:"section_id"`
+	Title        string    `json:"title"`
+	Color        string    `json:"color"`
+	TemplateType string    `json:"template_type"`
+	Difficulty   int32     `json:"difficulty"`
+	CreatedAt    time.Time `json:"created_at"`
+}
+
+func (q *Queries) ListPublishedLevels(ctx context.Context, arg ListPublishedLevelsParams) ([]ListPublishedLevelsRow, error) {
+	rows, err := q.db.QueryContext(ctx, listPublishedLevels, arg.Cursor, arg.PageSize)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListPublishedLevelsRow
+	for rows.Next() {
+		var i ListPublishedLevelsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.SectionID,
+			&i.Title,
+			&i.Color,
+			&i.TemplateType,
+			&i.Difficulty,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const logAdminAudit = `-- name: LogAdminAudit :exec

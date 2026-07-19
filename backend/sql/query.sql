@@ -84,3 +84,24 @@ INSERT INTO arco_requests (
 ) VALUES (
     $1, $2, $3, $4, $5, $6
 );
+
+-- name: CreateSection :exec
+INSERT INTO sections (
+    id, title, color, is_published, created_by_admin_id
+) VALUES (
+    $1, $2, $3, $4, $5
+);
+
+-- name: CreateLevel :exec
+INSERT INTO levels (
+    id, section_id, title, color, template_type, content, difficulty, is_published, created_by_admin_id
+) VALUES (
+    $1, $2, $3, $4, $5, $6, $7, $8, $9
+);
+
+-- name: ListPublishedLevels :many
+SELECT id, section_id, title, color, template_type, difficulty, created_at
+FROM levels
+WHERE is_published = true AND (id > sqlc.arg('cursor') OR sqlc.arg('cursor') = '00000000-0000-0000-0000-000000000000'::uuid)
+ORDER BY id ASC
+LIMIT sqlc.arg('page_size');

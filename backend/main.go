@@ -12,6 +12,7 @@ import (
 
 	"github.com/altair/usbi-backend/internal/auth"
 	"github.com/altair/usbi-backend/internal/crypto"
+	"github.com/altair/usbi-backend/internal/levels"
 	"github.com/altair/usbi-backend/internal/repository"
 	syncSvc "github.com/altair/usbi-backend/internal/sync"
 	"github.com/altair/usbi-backend/internal/transport"
@@ -33,10 +34,8 @@ func main() {
 	blindIndexSecret := requireEnv("BLIND_INDEX_SECRET")
 	hmacSecret := requireEnv("HMAC_SECRET")
 
-	// ── Optional with defaults ────────────────────────────────────────────────
+	// Optional with defaults
 	port := getEnv("SERVER_PORT", "8443")
-	certFile := getEnv("TLS_CERT_FILE", "cert.pem")
-	keyFile := getEnv("TLS_KEY_FILE", "key.pem")
 	allowedOrigin := getEnv("CORS_ALLOWED_ORIGIN", "")
 
 	accessExpiryStr := getEnv("JWT_ACCESS_EXPIRY_MINUTES", "60")
@@ -77,12 +76,14 @@ func main() {
 	})
 
 	syncService := syncSvc.NewService(queries, []byte(hmacSecret))
+	levelsSvc := levels.NewService(queries)
 
 	// ── Router wiring ─────────────────────────────────────────────────────────
 	r := chi.NewRouter()
 	transport.SetupRoutes(r, transport.RouterDependencies{
 		AuthHandler:   auth.NewHandler(authSvc),
 		SyncHandler:   syncSvc.NewHandler(syncService),
+		LevelsHandler: levels.NewHandler(levelsSvc),
 		TokenCfg:      tokenCfg,
 		Queries:       queries,
 		AllowedOrigin: allowedOrigin,
@@ -107,8 +108,8 @@ func main() {
 		IdleTimeout:  120 * time.Second,
 	}
 
-	fmt.Printf("[USBI Backend] Listening on :%s (TLS 1.2+)\n", port)
-	if err := server.ListenAndServeTLS(certFile, keyFile); err != nil {
+	fmt.Printf("[USBI Backend] Listening on :%s (HTTP)\n", port)
+	if err := server.ListenAndServe(); err != nil {
 		log.Fatalf("[FATAL] Server startup failed: %v", err)
 	}
 }

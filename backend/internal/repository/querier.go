@@ -11,6 +11,8 @@ import (
 )
 
 type Querier interface {
+	CreateLevel(ctx context.Context, arg CreateLevelParams) error
+	CreateSection(ctx context.Context, arg CreateSectionParams) error
 	CreateUser(ctx context.Context, arg CreateUserParams) (User, error)
 	GetLevelAttemptsByDate(ctx context.Context, arg GetLevelAttemptsByDateParams) (int64, error)
 	GetUserByEmailHash(ctx context.Context, arg GetUserByEmailHashParams) (GetUserByEmailHashRow, error)
@@ -21,6 +23,7 @@ type Querier interface {
 	InsertExperienceHistory(ctx context.Context, arg InsertExperienceHistoryParams) error
 	InsertLevelAttempt(ctx context.Context, arg InsertLevelAttemptParams) error
 	InsertSyncEvent(ctx context.Context, arg InsertSyncEventParams) error
+	ListPublishedLevels(ctx context.Context, arg ListPublishedLevelsParams) ([]ListPublishedLevelsRow, error)
 	LogAdminAudit(ctx context.Context, arg LogAdminAuditParams) error
 	UpdateSyncEventStatus(ctx context.Context, arg UpdateSyncEventStatusParams) error
 	UpdateUserAdultStatus(ctx context.Context, id uuid.UUID) error

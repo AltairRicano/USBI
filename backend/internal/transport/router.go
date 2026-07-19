@@ -8,6 +8,7 @@ import (
 	"github.com/altair/usbi-backend/internal/auth"
 	"github.com/altair/usbi-backend/internal/crypto"
 	"github.com/altair/usbi-backend/internal/domain"
+	"github.com/altair/usbi-backend/internal/levels"
 	"github.com/altair/usbi-backend/internal/repository"
 	syncHandler "github.com/altair/usbi-backend/internal/sync"
 	"github.com/go-chi/chi/v5"
@@ -17,10 +18,11 @@ import (
 // RouterDependencies holds all handler and config dependencies.
 // All fields are required for full Phase 2 functionality.
 type RouterDependencies struct {
-	AuthHandler *auth.Handler
-	SyncHandler *syncHandler.Handler
-	TokenCfg    crypto.TokenConfig
-	Queries     *repository.Queries
+	AuthHandler   *auth.Handler
+	SyncHandler   *syncHandler.Handler
+	LevelsHandler *levels.Handler
+	TokenCfg      crypto.TokenConfig
+	Queries       *repository.Queries
 	// AllowedOrigin is the CORS Allow-Origin value.
 	// Defaults to "https://usbi.edu.mx" if empty.
 	AllowedOrigin string
@@ -85,8 +87,13 @@ func SetupRoutes(r chi.Router, deps RouterDependencies) {
 			}
 
 			// Level routes (Phase 4 — Maker module)
-			r.Get("/levels", notImplementedHandler("levels.list"))
-			r.Post("/levels", notImplementedHandler("levels.create"))
+			if deps.LevelsHandler != nil {
+				r.Post("/levels", deps.LevelsHandler.CreateLevel)
+				r.Get("/levels", deps.LevelsHandler.ListLevels)
+			} else {
+				r.Post("/levels", notImplementedHandler("levels.create"))
+				r.Get("/levels", notImplementedHandler("levels.list"))
+			}
 		})
 	})
 

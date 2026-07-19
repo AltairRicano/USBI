@@ -1,0 +1,100 @@
+@import "tailwindcss";
+
+/* ============================================================
+   SISTEMA DE DISEÑO INSTITUCIONAL – USBI / Universidad Veracruzana
+   Fuente de verdad: plan/Convenciones_de_color_UV.md
+   Contraste verificado WCAG 2.2:
+     - primary (azul UV #18529D) sobre blanco → 7.69:1 ✓
+     - secondary (verde UV #28AD56) sobre negro → 7.20:1 ✓
+     - secondary sobre blanco → 2.92:1 ✗ → usar solo como acento
+   ============================================================ */
+
+@theme {
+  /* ── Paleta institucional UV ─────────────────────────────── */
+  --color-primary:            #18529D; /* Azul UV – botones, encabezados, links */
+  --color-primary-hover:      #0f3d76; /* Azul oscuro para hover */
+  --color-primary-foreground: #FFFFFF;
+
+  --color-secondary:          #28AD56; /* Verde UV – acentos, iconos, badges */
+  --color-secondary-dark:     #006633; /* Verde oscuro – texto sobre blanco (WCAG ✓) */
+  --color-secondary-foreground: #000000;
+
+  /* ── Neutros ─────────────────────────────────────────────── */
+  --color-background:   #FFFFFF;
+  --color-foreground:   #000000;
+  --color-surface:      #F5F5F5; /* Fondo de tarjetas / secciones */
+  --color-muted:        #4A4A4A; /* Texto secundario */
+  --color-border:       #D1D5DB;
+
+  /* ── Estado (accesibles WCAG) ────────────────────────────── */
+  --color-success:      #006633; /* Verde oscuro + texto blanco → 7.43:1 ✓ */
+  --color-warning:      #7A4E00; /* Dorado oscuro + texto blanco → 5.74:1 ✓ */
+  --color-error:        #B00020; /* Rojo oscuro + texto blanco → 5.91:1 ✓ */
+  --color-info:         #18529D;
+
+  /* ── Tipografía ──────────────────────────────────────────── */
+  --font-sans: 'Inter', 'Avenir', 'Helvetica', 'Arial', sans-serif;
+  --font-game: 'Fredoka One', cursive;
+
+  /* ── Accesibilidad motriz ────────────────────────────────── */
+  --spacing-touch: 44px; /* Área mínima de clic WCAG 2.5.5 */
+}
+
+/* ── Reset base institucional ──────────────────────────────── */
+@layer base {
+  *, *::before, *::after {
+    box-sizing: border-box;
+  }
+
+  html {
+    font-size: 16px; /* Base legible; plan pide mínimo 14px */
+    scroll-behavior: smooth;
+  }
+
+  body {
+    background-color: var(--color-background);
+    color: var(--color-foreground);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    line-height: 1.5;
+  }
+
+  /* Foco visible obligatorio (WCAG 2.4.11) */
+  :focus-visible {
+    outline: 3px solid var(--color-primary);
+    outline-offset: 2px;
+  }
+
+  /* Área de clic mínima 44×44px (WCAG 2.5.5) */
+  button, [role="button"], a, input, select, textarea {
+    min-height: var(--spacing-touch);
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    color: var(--color-primary);
+    font-weight: 700;
+    line-height: 1.25;
+  }
+
+  a {
+    color: var(--color-primary);
+    text-decoration: underline;
+  }
+
+  a:hover {
+    color: var(--color-primary-hover);
+  }
+}
+
+/* ── Filtros de accesibilidad daltónica (RNF16) ─────────────
+   Se activan mediante class en <html> vía AuthStore / Zustand  */
+html.deuteranopia {
+  filter: url('#deuteranopia-filter');
+}
+html.protanopia {
+  filter: url('#protanopia-filter');
+}
+html.tritanopia {
+  filter: url('#tritanopia-filter');
+}

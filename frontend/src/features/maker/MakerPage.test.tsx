@@ -37,21 +37,9 @@ describe('MakerPage', () => {
     });
   });
 
-  it('renders Flashcards sub-editor by default', () => {
+  it('renders Trivia sub-editor by default', () => {
     render(<MakerPage />);
-    // The Flashcards editor shows a field for "Pregunta / Frente"
-    expect(screen.getByPlaceholderText('¿Cuál es la capital de México?')).toBeDefined();
-  });
-
-  it('switches sub-editor when template type changes', async () => {
-    render(<MakerPage />);
-
-    const templateSelect = screen.getByLabelText('Tipo de Plantilla');
-    fireEvent.change(templateSelect, { target: { value: 'multiple_choice' } });
-
-    await waitFor(() => {
-      expect(screen.getByPlaceholderText('¿Cuál es...?')).toBeDefined();
-    });
+    expect(screen.getByPlaceholderText('¿Cuál es...?')).toBeDefined();
   });
 
   it('exports successfully when form is filled correctly', async () => {
@@ -60,13 +48,13 @@ describe('MakerPage', () => {
     fireEvent.change(screen.getByLabelText('Título'), { target: { value: 'Mi Nivel de Prueba' } });
     fireEvent.change(screen.getByLabelText('Autor'), { target: { value: 'Profe UV' } });
 
-    // Fill the flashcard sub-form (default template is flashcards)
-    fireEvent.change(screen.getByPlaceholderText('¿Cuál es la capital de México?'), {
+    fireEvent.change(screen.getByPlaceholderText('¿Cuál es...?'), {
       target: { value: '¿Capital de México?' },
     });
-    fireEvent.change(screen.getByPlaceholderText('Ciudad de México'), {
-      target: { value: 'Ciudad de México' },
-    });
+    fireEvent.change(screen.getByPlaceholderText('Opción 1'), { target: { value: 'Ciudad de México' } });
+    fireEvent.change(screen.getByPlaceholderText('Opción 2'), { target: { value: 'Guadalajara' } });
+    fireEvent.change(screen.getByPlaceholderText('Opción 3'), { target: { value: 'Monterrey' } });
+    fireEvent.change(screen.getByPlaceholderText('Opción 4'), { target: { value: 'Puebla' } });
 
     fireEvent.click(screen.getByRole('button', { name: /Exportar a Local/i }));
 

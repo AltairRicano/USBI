@@ -3,8 +3,10 @@ import { useNavigate, useLocation, Link } from 'react-router-dom';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
 import { useAuthStore, type User } from '../../stores/useAuthStore';
+import { useSyncStore } from '../../stores/useSyncStore';
 import { apiClient } from '../../lib/apiClient';
 import axios from 'axios';
+import { persistSecureSession } from '../../lib/secureSession';
 
 // ── Contratos del backend (Go dto.go) ────────────────────────────────────────
 
@@ -15,8 +17,13 @@ import axios from 'axios';
  */
 interface LoginResponse {
   access_token: string;
+  refresh_token: string;
   token_type: string;
   user: User;
+}
+
+interface DeviceResponse {
+  id: string;
 }
 
 /** RFC 7807 Problem Details */
@@ -32,11 +39,16 @@ export default function LoginPage() {
   const navigate = useNavigate();
   const location = useLocation();
   const login = useAuthStore((s) => s.login);
+  const setDeviceId = useSyncStore((s) => s.setDeviceId);
 
   // Corrección: el campo se llama "email" en el backend, no "identifier"
   const [email, setEmail]     = useState('');
   const [password, setPassword] = useState('');
   const [error, setError]       = useState<string | null>(null);
+  const [notice, setNotice]     = useState<string | null>(() => {
+    const state = location.state as { message?: string } | null;
+    return state?.message ?? null;
+  });
   const [loading, setLoading]   = useState(false);
 
   const from = (location.state as { from?: { pathname: string } })?.from?.pathname ?? '/dashboard';
@@ -44,6 +56,7 @@ export default function LoginPage() {
   async function handleSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setError(null);
+    setNotice(null);
     setLoading(true);
 
     try {
@@ -52,13 +65,27 @@ export default function LoginPage() {
         password,
       });
 
-      // Corrección: usar data.access_token (no data.token)
-      login(data.user, data.access_token);
+      login(data.user, data.access_token, data.refresh_token);
+      const device = await apiClient.post<DeviceResponse>('/devices', {
+        device_label: navigator.userAgent.slice(0, 80) || 'USBI Web',
+        platform: window.__TAURI__ ? 'tauri' : 'web',
+      });
+      setDeviceId(device.data.id);
+      await persistSecureSession({
+        user: data.user,
+        token: data.access_token,
+        refreshToken: data.refresh_token,
+        deviceId: device.data.id,
+      });
       navigate(from, { replace: true });
     } catch (err: unknown) {
       if (axios.isAxiosError(err) && err.response) {
         const problem = err.response.data as ProblemDetails;
-        setError(problem.detail ?? 'Error al iniciar sesión. Intenta de nuevo.');
+        if (problem.type?.endsWith('/pending-tutor-consent')) {
+          setError('La cuenta está pendiente de consentimiento de tutor. Completa el registro del tutor antes de iniciar sesión.');
+        } else {
+          setError(problem.detail ?? 'Error al iniciar sesión. Intenta de nuevo.');
+        }
       } else {
         setError('No se pudo conectar con el servidor.');
       }
@@ -119,6 +146,12 @@ export default function LoginPage() {
             aria-required="true"
             error={error ?? undefined}
           />
+
+          {notice && (
+            <p className="rounded border border-[--color-border] bg-white p-3 text-sm text-[--color-primary]">
+              {notice}
+            </p>
+          )}
 
           <Button
             type="submit"

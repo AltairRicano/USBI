@@ -14,7 +14,7 @@ export const FakeNewsGame: React.FC<FakeNewsGameProps> = ({ news, onComplete }) 
 
   useEffect(() => {
     // We emit ON_GAME_START using a hypothetical event bus or Tauri command
-    // window.__TAURI__?.invoke('set_game_status', { status: true });
+    // window.__TAURI__?.invoke('set_game_status', { isPlaying: true });
     // In a real app we'd dispatch to Zustand or EventBus
   }, []);
 

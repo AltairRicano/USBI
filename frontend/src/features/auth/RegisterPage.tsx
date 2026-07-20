@@ -12,6 +12,14 @@ interface ProblemDetails {
   detail: string;
 }
 
+interface RegisterResponse {
+  user_id: string;
+  status: 'active' | 'pending_tutor_consent';
+  message: string;
+}
+
+const privacyNoticeVersion = import.meta.env.VITE_PRIVACY_NOTICE_VERSION ?? 'v1.0';
+
 export default function RegisterPage() {
   const navigate = useNavigate();
   const [fullName, setFullName] = useState('');
@@ -19,6 +27,8 @@ export default function RegisterPage() {
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [isAdult, setIsAdult] = useState(false);
+  const [tutorName, setTutorName] = useState('');
+  const [tutorEmail, setTutorEmail] = useState('');
   const [privacyAccepted, setPrivacyAccepted] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -31,25 +41,34 @@ export default function RegisterPage() {
       setError('Las contraseñas no coinciden.');
       return;
     }
-    if (!isAdult) {
-      setError('Debes confirmar tu mayoría de edad para continuar o seguir el proceso correspondiente.');
-      return;
-    }
     if (!privacyAccepted) {
       setError('Debes aceptar el Aviso de Privacidad.');
+      return;
+    }
+    if (!isAdult && (!tutorName || !tutorEmail)) {
+      setError('Para registrar una cuenta de menor se requieren los datos del tutor.');
       return;
     }
 
     setLoading(true);
 
     try {
-      await apiClient.post('/auth/register', {
+      const { data } = await apiClient.post<RegisterResponse>('/auth/register', {
         full_name: fullName,
         email,
         password,
         is_adult: isAdult,
-        privacy_notice_version: 'v1.0'
+        privacy_notice_version: privacyNoticeVersion,
       });
+
+      if (data.status === 'pending_tutor_consent') {
+        await apiClient.post('/auth/tutor-consent', {
+          user_id: data.user_id,
+          tutor_name: tutorName,
+          tutor_email: tutorEmail,
+          privacy_notice_version: privacyNoticeVersion,
+        });
+      }
 
       navigate('/login', { state: { message: 'Registro exitoso. Ahora puedes iniciar sesión.' } });
     } catch (err: unknown) {
@@ -132,6 +151,27 @@ export default function RegisterPage() {
                 Confirmo que soy mayor de edad (Ley 251)
               </span>
             </label>
+
+            {!isAdult && (
+              <div className="space-y-3 rounded-lg border border-[--color-border] p-3">
+                <Input
+                  id="reg-tutor-name"
+                  label="Nombre del tutor"
+                  type="text"
+                  value={tutorName}
+                  onChange={(e) => setTutorName(e.currentTarget.value)}
+                  required={!isAdult}
+                />
+                <Input
+                  id="reg-tutor-email"
+                  label="Correo del tutor"
+                  type="email"
+                  value={tutorEmail}
+                  onChange={(e) => setTutorEmail(e.currentTarget.value)}
+                  required={!isAdult}
+                />
+              </div>
+            )}
 
             <label className="flex items-start space-x-2 text-sm cursor-pointer">
               <input

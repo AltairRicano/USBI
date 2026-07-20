@@ -155,8 +155,8 @@ CREATE TABLE player_progress (
 );
 
 -- ─────────────────────────────────────────────────────────────────────────────
--- CONCURRENCY NOTE (RF15): attempt_number resolution MUST use SELECT ... FOR UPDATE
--- or a serializable transaction in Go to prevent offline sync race conditions.
+-- CONCURRENCY NOTE (RF15): attempt_number resolution MUST use transactional
+-- locking in Go to prevent online/offline sync race conditions.
 
 CREATE TABLE level_attempts (
     id             UUID    PRIMARY KEY,

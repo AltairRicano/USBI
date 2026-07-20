@@ -1,8 +1,8 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "tauri-app",
+  "productName": "USBI",
   "version": "0.1.0",
-  "identifier": "com.usbi.tauri-app",
+  "identifier": "mx.edu.uv.usbi",
   "build": {
     "beforeDevCommand": "pnpm dev",
     "devUrl": "http://localhost:1420",
@@ -13,9 +13,9 @@
     "withGlobalTauri": true,
     "windows": [
       {
-        "title": "tauri-app",
-        "width": 800,
-        "height": 600
+        "title": "USBI",
+        "width": 1180,
+        "height": 760
       }
     ],
     "security": {

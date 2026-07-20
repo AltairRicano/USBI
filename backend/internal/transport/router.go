@@ -4,9 +4,11 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"time"
 
 	"github.com/altair/usbi-backend/internal/auth"
 	"github.com/altair/usbi-backend/internal/crypto"
+	"github.com/altair/usbi-backend/internal/devices"
 	"github.com/altair/usbi-backend/internal/domain"
 	"github.com/altair/usbi-backend/internal/levels"
 	"github.com/altair/usbi-backend/internal/repository"
@@ -18,11 +20,13 @@ import (
 // RouterDependencies holds all handler and config dependencies.
 // All fields are required for full Phase 2 functionality.
 type RouterDependencies struct {
-	AuthHandler   *auth.Handler
-	SyncHandler   *syncHandler.Handler
-	LevelsHandler *levels.Handler
-	TokenCfg      crypto.TokenConfig
-	Queries       *repository.Queries
+	AuthHandler    *auth.Handler
+	SyncHandler    *syncHandler.Handler
+	LevelsHandler  *levels.Handler
+	DevicesHandler *devices.Handler
+	ReadyCheck     func(context.Context) error
+	TokenCfg       crypto.TokenConfig
+	Queries        *repository.Queries
 	// AllowedOrigin is the CORS Allow-Origin value.
 	// Defaults to "https://usbi.edu.mx" if empty.
 	AllowedOrigin string
@@ -59,11 +63,14 @@ func SetupRoutes(r chi.Router, deps RouterDependencies) {
 			if deps.AuthHandler != nil {
 				r.Post("/auth/register", deps.AuthHandler.Register)
 				r.Post("/auth/login", deps.AuthHandler.Login)
+				r.Post("/auth/refresh", deps.AuthHandler.Refresh)
+				r.Post("/auth/tutor-consent", deps.AuthHandler.TutorConsent)
 			} else {
 				r.Post("/auth/register", notImplementedHandler("auth.register"))
 				r.Post("/auth/login", notImplementedHandler("auth.login"))
+				r.Post("/auth/refresh", notImplementedHandler("auth.refresh"))
+				r.Post("/auth/tutor-consent", notImplementedHandler("auth.tutorConsent"))
 			}
-			r.Post("/auth/tutor-consent", notImplementedHandler("auth.tutorConsent"))
 		})
 
 		// ── Authenticated routes ──────────────────────────────────────────────
@@ -74,10 +81,14 @@ func SetupRoutes(r chi.Router, deps RouterDependencies) {
 				r.Post("/auth/logout", deps.AuthHandler.Logout)
 				r.Post("/auth/age-up", deps.AuthHandler.AgeUp)
 				r.Post("/arco", deps.AuthHandler.Arco)
+				r.Get("/arco/pending", deps.AuthHandler.ListPendingArco)
+				r.Post("/arco/{request_id}/resolve", deps.AuthHandler.ResolveArco)
 			} else {
 				r.Post("/auth/logout", notImplementedHandler("auth.logout"))
 				r.Post("/auth/age-up", notImplementedHandler("auth.ageUp"))
 				r.Post("/arco", notImplementedHandler("arco.submitRequest"))
+				r.Get("/arco/pending", notImplementedHandler("arco.listPending"))
+				r.Post("/arco/{request_id}/resolve", notImplementedHandler("arco.resolveRequest"))
 			}
 
 			if deps.SyncHandler != nil {
@@ -86,19 +97,45 @@ func SetupRoutes(r chi.Router, deps RouterDependencies) {
 				r.Post("/sync", notImplementedHandler("sync.offlineProgress"))
 			}
 
+			if deps.DevicesHandler != nil {
+				r.Post("/devices", deps.DevicesHandler.RegisterDevice)
+				r.Get("/devices", deps.DevicesHandler.ListDevices)
+			} else {
+				r.Post("/devices", notImplementedHandler("devices.register"))
+				r.Get("/devices", notImplementedHandler("devices.list"))
+			}
+
 			// Level routes (Phase 4 — Maker module)
 			if deps.LevelsHandler != nil {
+				r.Get("/sections", deps.LevelsHandler.ListSections)
+				r.Post("/sections", deps.LevelsHandler.CreateSection)
+				r.Patch("/sections/{section_id}", deps.LevelsHandler.UpdateSection)
+				r.Post("/sections/{section_id}/publish", deps.LevelsHandler.PublishSection)
+				r.Post("/sections/{section_id}/archive", deps.LevelsHandler.ArchiveSection)
+
 				r.Post("/levels", deps.LevelsHandler.CreateLevel)
 				r.Get("/levels", deps.LevelsHandler.ListLevels)
+				r.Get("/levels/{level_id}", deps.LevelsHandler.GetLevel)
+				r.Patch("/levels/{level_id}", deps.LevelsHandler.UpdateLevel)
+				r.Post("/levels/{level_id}/publish", deps.LevelsHandler.PublishLevel)
+				r.Post("/levels/{level_id}/archive", deps.LevelsHandler.ArchiveLevel)
+				r.Post("/levels/{level_id}/complete", deps.LevelsHandler.CompleteLevel)
+
+				r.Get("/profile/progress", deps.LevelsHandler.GetProfileProgress)
 			} else {
+				r.Get("/sections", notImplementedHandler("sections.list"))
+				r.Post("/sections", notImplementedHandler("sections.create"))
 				r.Post("/levels", notImplementedHandler("levels.create"))
 				r.Get("/levels", notImplementedHandler("levels.list"))
+				r.Get("/profile/progress", notImplementedHandler("profile.progress"))
 			}
 		})
 	})
 
 	// Health check — unauthenticated, unversioned
 	r.Get("/health", healthHandler)
+	r.Get("/health/live", healthHandler)
+	r.Get("/health/ready", readyHandler(deps.ReadyCheck))
 }
 
 // healthHandler returns a simple liveness probe response.
@@ -106,6 +143,26 @@ func healthHandler(w http.ResponseWriter, _ *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	_, _ = w.Write([]byte(`{"status":"ok","service":"usbi-backend"}`))
+}
+
+func readyHandler(check func(context.Context) error) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if check == nil {
+			healthHandler(w, r)
+			return
+		}
+
+		ctx, cancel := context.WithTimeout(r.Context(), 2*time.Second)
+		defer cancel()
+		if err := check(ctx); err != nil {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusServiceUnavailable)
+			_, _ = w.Write([]byte(`{"status":"unavailable","service":"usbi-backend","dependency":"database"}`))
+			return
+		}
+
+		healthHandler(w, r)
+	}
 }
 
 // notImplementedHandler returns a 501 stub for routes pending implementation.
@@ -123,7 +180,7 @@ func corsMiddleware(allowedOrigin string) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			w.Header().Set("Access-Control-Allow-Origin", allowedOrigin)
-			w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+			w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PATCH, OPTIONS")
 			w.Header().Set("Access-Control-Allow-Headers", "Authorization, Content-Type, X-Request-ID")
 			w.Header().Set("Access-Control-Max-Age", "86400")
 			if r.Method == http.MethodOptions {

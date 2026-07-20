@@ -15,13 +15,9 @@ const MakerFormSchema = z.object({
     creation_date: z.string(),
     color: z.string().min(1),
     difficulty: z.number().int().min(1).max(10),
-    template_type: z.enum(['flashcards', 'multiple_choice', 'drag_and_drop', 'memory']),
+    template_type: z.literal('trivia'),
   }),
   // Content fields are optional at form level — validated manually in onExport.
-  flashcards: z.array(z.object({
-    question: z.string(),
-    answer: z.string(),
-  })).optional(),
   questions: z.array(z.object({
     question: z.string(),
     options: z.array(z.string()).length(4),
@@ -53,9 +49,8 @@ export const MakerPage = () => {
         creation_date: new Date().toISOString(),
         color: '#18529D',
         difficulty: 1,
-        template_type: 'flashcards',
+        template_type: 'trivia',
       },
-      flashcards: [{ question: '', answer: '' }],
       questions: [{ question: '', options: ['', '', '', ''], correct_index: 0 }],
     },
   });
@@ -63,28 +58,15 @@ export const MakerPage = () => {
   // eslint-disable-next-line react-hooks/incompatible-library
   const selectedTemplate = watch('metadata.template_type');
 
-  const flashcardsField = useFieldArray({ control, name: 'flashcards' });
   const questionsField = useFieldArray({ control, name: 'questions' });
 
   const onExport = async (data: MakerForm) => {
     setExportStatus('idle');
 
-    // Build the content array based on template type.
-    let content: unknown;
-    if (data.metadata.template_type === 'flashcards') {
-      content = (data.flashcards ?? []).filter(c => c.question || c.answer);
-      if ((content as unknown[]).length === 0) {
-        setExportStatus('error');
-        return;
-      }
-    } else if (data.metadata.template_type === 'multiple_choice') {
-      content = (data.questions ?? []).filter(q => q.question);
-      if ((content as unknown[]).length === 0) {
-        setExportStatus('error');
-        return;
-      }
-    } else {
-      content = [];
+    const content = (data.questions ?? []).filter(q => q.question && q.options.every(Boolean));
+    if (content.length === 0) {
+      setExportStatus('error');
+      return;
     }
 
     const levelExport = { metadata: data.metadata, content };
@@ -196,10 +178,7 @@ export const MakerPage = () => {
               control={control}
               render={({ field }) => (
                 <select id="maker-template" {...field} className="w-full p-2 border rounded bg-white">
-                  <option value="flashcards">Flashcards</option>
-                  <option value="multiple_choice">Opción Múltiple</option>
-                  <option value="drag_and_drop">Arrastrar y Soltar</option>
-                  <option value="memory">Memorización</option>
+                  <option value="trivia">Trivia</option>
                 </select>
               )}
             />
@@ -210,42 +189,7 @@ export const MakerPage = () => {
         <fieldset className="border rounded-lg p-4 space-y-3">
           <legend className="text-sm font-semibold text-[#18529D] px-1">Contenido del Nivel</legend>
 
-          {/* FLASHCARDS */}
-          {selectedTemplate === 'flashcards' && (
-            <div className="space-y-3">
-              {flashcardsField.fields.map((field, idx) => (
-                <div key={field.id} className="border rounded p-3 space-y-2 bg-gray-50">
-                  <div className="flex justify-between items-center">
-                    <span className="text-xs font-semibold text-[#18529D]">Tarjeta {idx + 1}</span>
-                    {flashcardsField.fields.length > 1 && (
-                      <button type="button" onClick={() => flashcardsField.remove(idx)} className="text-red-500 text-xs hover:underline">
-                        Eliminar
-                      </button>
-                    )}
-                  </div>
-                  <label htmlFor={`fc-q-${idx}`} className="block text-xs font-medium">Pregunta / Frente</label>
-                  <input id={`fc-q-${idx}`} {...register(`flashcards.${idx}.question`)}
-                    className="w-full p-2 border rounded text-sm" placeholder="¿Cuál es la capital de México?" />
-                  {errors.flashcards?.[idx]?.question && (
-                    <p className="text-red-500 text-xs">{errors.flashcards[idx]?.question?.message}</p>
-                  )}
-                  <label htmlFor={`fc-a-${idx}`} className="block text-xs font-medium">Respuesta / Reverso</label>
-                  <input id={`fc-a-${idx}`} {...register(`flashcards.${idx}.answer`)}
-                    className="w-full p-2 border rounded text-sm" placeholder="Ciudad de México" />
-                  {errors.flashcards?.[idx]?.answer && (
-                    <p className="text-red-500 text-xs">{errors.flashcards[idx]?.answer?.message}</p>
-                  )}
-                </div>
-              ))}
-              <button type="button" onClick={() => flashcardsField.append({ question: '', answer: '' })}
-                className="text-sm text-[#18529D] hover:underline">
-                + Añadir tarjeta
-              </button>
-            </div>
-          )}
-
-          {/* MULTIPLE CHOICE */}
-          {selectedTemplate === 'multiple_choice' && (
+          {selectedTemplate === 'trivia' && (
             <div className="space-y-3">
               {questionsField.fields.map((field, idx) => (
                 <div key={field.id} className="border rounded p-3 space-y-2 bg-gray-50">
@@ -284,14 +228,6 @@ export const MakerPage = () => {
                 className="text-sm text-[#18529D] hover:underline">
                 + Añadir pregunta
               </button>
-            </div>
-          )}
-
-          {/* DRAG & DROP / MEMORY — editors pending next iteration */}
-          {(selectedTemplate === 'drag_and_drop' || selectedTemplate === 'memory') && (
-            <div className="rounded border p-3 bg-amber-50 text-sm text-amber-800">
-              ⚠️ El editor visual de este tipo de plantilla estará disponible en la próxima iteración.
-              Exporta ahora y edita el campo <code>content</code> manualmente en el JSON.
             </div>
           )}
         </fieldset>

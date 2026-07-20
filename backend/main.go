@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"crypto/tls"
 	"database/sql"
 	"fmt"
@@ -12,7 +13,9 @@ import (
 
 	"github.com/altair/usbi-backend/internal/auth"
 	"github.com/altair/usbi-backend/internal/crypto"
+	"github.com/altair/usbi-backend/internal/devices"
 	"github.com/altair/usbi-backend/internal/levels"
+	"github.com/altair/usbi-backend/internal/maintenance"
 	"github.com/altair/usbi-backend/internal/repository"
 	syncSvc "github.com/altair/usbi-backend/internal/sync"
 	"github.com/altair/usbi-backend/internal/transport"
@@ -35,10 +38,10 @@ func main() {
 	hmacSecret := requireEnv("HMAC_SECRET")
 
 	// Optional with defaults
-	port := getEnv("SERVER_PORT", "8443")
+	port := getEnv("SERVER_PORT", "8088")
 	allowedOrigin := getEnv("CORS_ALLOWED_ORIGIN", "")
 
-	accessExpiryStr := getEnv("JWT_ACCESS_EXPIRY_MINUTES", "60")
+	accessExpiryStr := getEnv("JWT_ACCESS_EXPIRY_MINUTES", "15")
 	accessExpiryMinutes, err := strconv.Atoi(accessExpiryStr)
 	if err != nil {
 		log.Fatalf("[FATAL] Invalid JWT_ACCESS_EXPIRY_MINUTES: %v", err)
@@ -51,9 +54,9 @@ func main() {
 	}
 	defer db.Close()
 
-	db.SetMaxOpenConns(25)
-	db.SetMaxIdleConns(5)
-	db.SetConnMaxLifetime(5 * time.Minute)
+	db.SetMaxOpenConns(10)
+	db.SetMaxIdleConns(2)
+	db.SetConnMaxLifetime(30 * time.Minute)
 
 	if err := db.Ping(); err != nil {
 		log.Fatalf("[FATAL] Database unreachable: %v", err)
@@ -77,16 +80,36 @@ func main() {
 
 	syncService := syncSvc.NewService(queries, []byte(hmacSecret))
 	levelsSvc := levels.NewService(queries)
+	devicesSvc := devices.NewService(queries)
+	if getBoolEnv("LEGAL_MAINTENANCE_ENABLED", false) {
+		maintenanceSvc := maintenance.NewService(queries, maintenance.Config{
+			EncryptionKey:        encryptionKey,
+			BlindIndexSecret:     []byte(blindIndexSecret),
+			PendingTutorTTL:      getDurationEnv("PENDING_TUTOR_TTL", 48*time.Hour),
+			InactiveSuspendAfter: getDurationEnv("INACTIVE_SUSPEND_AFTER", 365*24*time.Hour),
+			SuspendedCancelAfter: getDurationEnv("SUSPENDED_CANCEL_AFTER", 30*24*time.Hour),
+			BatchSize:            getInt32Env("LEGAL_MAINTENANCE_BATCH_SIZE", 100),
+		})
+		maintenance.StartScheduler(
+			context.Background(),
+			maintenanceSvc,
+			getDurationEnv("LEGAL_MAINTENANCE_INTERVAL", 24*time.Hour),
+			log.Default(),
+		)
+		log.Println("[INFO] Legal maintenance scheduler enabled")
+	}
 
 	// ── Router wiring ─────────────────────────────────────────────────────────
 	r := chi.NewRouter()
 	transport.SetupRoutes(r, transport.RouterDependencies{
-		AuthHandler:   auth.NewHandler(authSvc),
-		SyncHandler:   syncSvc.NewHandler(syncService),
-		LevelsHandler: levels.NewHandler(levelsSvc),
-		TokenCfg:      tokenCfg,
-		Queries:       queries,
-		AllowedOrigin: allowedOrigin,
+		AuthHandler:    auth.NewHandler(authSvc),
+		SyncHandler:    syncSvc.NewHandler(syncService),
+		LevelsHandler:  levels.NewHandler(levelsSvc),
+		DevicesHandler: devices.NewHandler(devicesSvc),
+		ReadyCheck:     db.PingContext,
+		TokenCfg:       tokenCfg,
+		Queries:        queries,
+		AllowedOrigin:  allowedOrigin,
 	})
 
 	// ── TLS 1.2+ (RF69 — TLS 1.0/1.1 explicitly disabled) ────────────────────
@@ -130,4 +153,40 @@ func getEnv(key, fallback string) string {
 		return val
 	}
 	return fallback
+}
+
+func getBoolEnv(key string, fallback bool) bool {
+	val := os.Getenv(key)
+	if val == "" {
+		return fallback
+	}
+	parsed, err := strconv.ParseBool(val)
+	if err != nil {
+		log.Fatalf("[FATAL] Invalid %s: %v", key, err)
+	}
+	return parsed
+}
+
+func getDurationEnv(key string, fallback time.Duration) time.Duration {
+	val := os.Getenv(key)
+	if val == "" {
+		return fallback
+	}
+	parsed, err := time.ParseDuration(val)
+	if err != nil {
+		log.Fatalf("[FATAL] Invalid %s: %v", key, err)
+	}
+	return parsed
+}
+
+func getInt32Env(key string, fallback int32) int32 {
+	val := os.Getenv(key)
+	if val == "" {
+		return fallback
+	}
+	parsed, err := strconv.ParseInt(val, 10, 32)
+	if err != nil || parsed <= 0 {
+		log.Fatalf("[FATAL] Invalid %s: %v", key, err)
+	}
+	return int32(parsed)
 }

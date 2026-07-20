@@ -14,7 +14,7 @@ export const MemoryGame: React.FC<MemoryGameProps> = ({ pairs, onComplete }) => 
   const [isProcessing, setIsProcessing] = useState(false);
 
   useEffect(() => {
-    // window.__TAURI__?.invoke('set_game_status', { status: true });
+    // window.__TAURI__?.invoke('set_game_status', { isPlaying: true });
   }, []);
 
   const handleCardClick = (index: number) => {

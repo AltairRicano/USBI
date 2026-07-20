@@ -4,16 +4,27 @@ Monorepo local de la plataforma USBI.
 
 ## Backend local
 
-1. Copia `backend/.env.example` a `backend/.env` y ajusta secretos.
+1. Copia `backend/.env.local.example` a `backend/.env.local` y ajusta secretos.
 2. Aplica las migraciones SQL en `backend/migrations/`.
 3. Ejecuta:
 
 ```sh
-make backend-run
+make backend-run-local
 ```
 
-El backend usa `SERVER_PORT=8088` por defecto y espera PostgreSQL/PgBouncer en
-`DATABASE_URL`.
+Para otros entornos puedes copiar `backend/.env.server.example` a un archivo
+propio y arrancar con:
+
+```sh
+cd backend
+USBI_BACKEND_ENV_FILE=.env.server go run .
+```
+
+El backend toma puerto, CORS y base de datos desde variables:
+`SERVER_PORT`, `CORS_ALLOWED_ORIGIN`, `DB_HOST`, `DB_PORT`, `DB_USER`,
+`DB_PASSWORD`, `DB_NAME` y `DB_SSLMODE`. Si prefieres una cadena completa,
+`DATABASE_URL` también es aceptada y tiene prioridad. No debe editarse código
+para pasar de local a servidor.
 
 La fuente de verdad del esquema es `backend/migrations/`; `backend/sqlc.yaml`
 genera repositorios a partir de esas migraciones y `backend/sql/query.sql`.
@@ -27,7 +38,7 @@ Para crear un administrador inicial:
 
 ```sh
 cd backend
-go run ./cmd/create_admin
+USBI_BACKEND_ENV_FILE=.env.local go run ./cmd/create_admin
 ```
 
 ### Mantenimiento Legal
@@ -51,12 +62,15 @@ seudonimiza PII, revoca refresh tokens y marca dispositivos para purga local.
 
 ## Frontend local
 
-1. Copia `frontend/.env.example` a `frontend/.env.local` si necesitas cambiar la API.
+1. Copia `frontend/.env.local.example` a `frontend/.env.local` y ajusta la API si aplica.
 2. Ejecuta:
 
 ```sh
 make frontend-dev
 ```
+
+Para servidor, usa `frontend/.env.server.example` como base para el archivo de
+variables que se usará durante el build.
 
 `VITE_API_BASE_URL` controla la URL del backend. No debe editarse código para
 cambiar entre local, servidor de pruebas o producción.
@@ -72,7 +86,8 @@ chunk dinámico de juegos para no penalizar el primer acceso a login/dashboard.
 
 ## Tauri local
 
-El wrapper Tauri usa WebKitGTK en Linux. Antes de `cargo check` o
+El wrapper Tauri no es necesario para ejecutar la app web. Si se retoma la app
+de escritorio, usa WebKitGTK en Linux. Antes de `cargo check` o
 `pnpm tauri dev`, instala los paquetes de sistema equivalentes a:
 
 ```sh
@@ -80,10 +95,9 @@ webkit2gtk-4.1
 javascriptcoregtk-4.1
 ```
 
-El ping de conectividad usa `USBI_BACKEND_ADDR` y por defecto apunta a
-`127.0.0.1:8088`. La firma HMAC de sync lee `USBI_HMAC_SECRET` desde el
-proceso Rust; debe coincidir con `HMAC_SECRET` del backend y no se pasa desde
-JavaScript.
+El ping de conectividad de escritorio usa `USBI_BACKEND_ADDR`. La firma HMAC de
+sync lee `USBI_HMAC_SECRET` desde el proceso Rust; debe coincidir con
+`HMAC_SECRET` del backend y no se pasa desde JavaScript.
 
 La cola offline de Tauri usa SQLite local en `usbi_local.db` y guarda sólo:
 `user_id`, `device_id`, payload técnico de progreso y fecha de creación. No

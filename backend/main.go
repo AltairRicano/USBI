@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"net/url"
 	"os"
 	"strconv"
 	"time"
@@ -25,13 +26,10 @@ import (
 )
 
 func main() {
-	// Load .env in development. In production, vars come from the system environment.
-	if err := godotenv.Load(); err != nil {
-		log.Println("[WARN] .env not found — reading from system environment")
-	}
+	loadEnvironment()
 
 	// ── Required environment variables ────────────────────────────────────────
-	dbURL := requireEnv("DATABASE_URL")
+	dbURL := databaseURL()
 	jwtSecret := requireEnv("JWT_SECRET")
 	encryptionKey := requireEnv("PGP_ENCRYPTION_KEY")
 	blindIndexSecret := requireEnv("BLIND_INDEX_SECRET")
@@ -135,6 +133,45 @@ func main() {
 	if err := server.ListenAndServe(); err != nil {
 		log.Fatalf("[FATAL] Server startup failed: %v", err)
 	}
+}
+
+func loadEnvironment() {
+	if envFile := os.Getenv("USBI_BACKEND_ENV_FILE"); envFile != "" {
+		if err := godotenv.Load(envFile); err != nil {
+			log.Printf("[WARN] %s not found or unreadable — reading from system environment", envFile)
+		}
+		return
+	}
+
+	// Load .env in development. In production, vars normally come from systemd,
+	// Docker, or the hosting environment.
+	if err := godotenv.Load(); err != nil {
+		log.Println("[WARN] .env not found — reading from system environment")
+	}
+}
+
+func databaseURL() string {
+	if val := os.Getenv("DATABASE_URL"); val != "" {
+		return val
+	}
+
+	dbUser := requireEnv("DB_USER")
+	dbPassword := requireEnv("DB_PASSWORD")
+	dbHost := requireEnv("DB_HOST")
+	dbPort := getEnv("DB_PORT", "5432")
+	dbName := requireEnv("DB_NAME")
+	sslMode := getEnv("DB_SSLMODE", "disable")
+
+	dsn := &url.URL{
+		Scheme: "postgres",
+		User:   url.UserPassword(dbUser, dbPassword),
+		Host:   fmt.Sprintf("%s:%s", dbHost, dbPort),
+		Path:   dbName,
+	}
+	query := dsn.Query()
+	query.Set("sslmode", sslMode)
+	dsn.RawQuery = query.Encode()
+	return dsn.String()
 }
 
 // requireEnv panics at startup if the environment variable is missing or empty.

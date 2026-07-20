@@ -1,10 +1,13 @@
 BACKEND_DIR := backend
 FRONTEND_DIR := frontend
 
-.PHONY: backend-run backend-test backend-build frontend-dev frontend-build frontend-lint frontend-test verify
+.PHONY: backend-run backend-run-local backend-test backend-build frontend-dev frontend-build frontend-lint frontend-test verify
 
 backend-run:
 	cd $(BACKEND_DIR) && go run .
+
+backend-run-local:
+	cd $(BACKEND_DIR) && USBI_BACKEND_ENV_FILE=.env.local go run .
 
 backend-test:
 	cd $(BACKEND_DIR) && go test ./...

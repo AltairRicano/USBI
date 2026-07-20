@@ -5,22 +5,20 @@ import (
 	"database/sql"
 	"fmt"
 	"log"
+	"net/url"
 	"os"
 
 	"github.com/altair/usbi-backend/internal/auth"
 	"github.com/altair/usbi-backend/internal/crypto"
 	"github.com/altair/usbi-backend/internal/repository"
-	_ "github.com/lib/pq"
 	"github.com/joho/godotenv"
+	_ "github.com/lib/pq"
 )
 
 func main() {
-	if err := godotenv.Load(); err != nil {}
+	loadEnvironment()
 	ctx := context.Background()
-	dbURL := os.Getenv("DATABASE_URL")
-	if dbURL == "" {
-		log.Fatal("DATABASE_URL is not set")
-	}
+	dbURL := databaseURL()
 
 	db, err := sql.Open("postgres", dbURL)
 	if err != nil {
@@ -39,7 +37,7 @@ func main() {
 	}
 
 	svc := auth.NewService(queries, cfg)
-	
+
 	req := auth.RegisterRequest{
 		FullName:             "Admin USBI",
 		Email:                "admin@usbi.edu.mx",
@@ -62,4 +60,48 @@ func main() {
 	}
 
 	fmt.Println("Success! Admin user created.")
+}
+
+func loadEnvironment() {
+	if envFile := os.Getenv("USBI_BACKEND_ENV_FILE"); envFile != "" {
+		if err := godotenv.Load(envFile); err != nil {
+			log.Printf("[WARN] %s not found or unreadable — reading from system environment", envFile)
+		}
+		return
+	}
+	if err := godotenv.Load(); err != nil {
+		log.Println("[WARN] .env not found — reading from system environment")
+	}
+}
+
+func databaseURL() string {
+	if val := os.Getenv("DATABASE_URL"); val != "" {
+		return val
+	}
+
+	dsn := &url.URL{
+		Scheme: "postgres",
+		User:   url.UserPassword(requireEnv("DB_USER"), requireEnv("DB_PASSWORD")),
+		Host:   fmt.Sprintf("%s:%s", requireEnv("DB_HOST"), getEnv("DB_PORT", "5432")),
+		Path:   requireEnv("DB_NAME"),
+	}
+	query := dsn.Query()
+	query.Set("sslmode", getEnv("DB_SSLMODE", "disable"))
+	dsn.RawQuery = query.Encode()
+	return dsn.String()
+}
+
+func requireEnv(key string) string {
+	val := os.Getenv(key)
+	if val == "" {
+		log.Fatalf("%s is not set", key)
+	}
+	return val
+}
+
+func getEnv(key, fallback string) string {
+	if val := os.Getenv(key); val != "" {
+		return val
+	}
+	return fallback
 }

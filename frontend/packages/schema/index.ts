@@ -50,15 +50,6 @@ export const SyncEventSchema = z.object({
   hmac_signature: z.string(),
 });
 
-// Maker Schemas
-
-export const FlashcardSchema = z.object({
-  question: z.string().min(1),
-  answer: z.string().min(1),
-  color: z.string().optional(),
-  media_url: z.string().optional(),
-});
-
 export const MultipleChoiceSchema = z.object({
   question: z.string().min(1),
   options: z.array(z.string()).min(2).max(4),
@@ -115,12 +106,26 @@ export const CrosswordSchema = z.object({
 
 export const WordSearchSchema = z.object({
   words: z.array(z.string().min(2)).min(2),
+  width: z.number().int().min(5).max(24).optional(),
+  height: z.number().int().min(5).max(24).optional(),
+  seed: z.number().int().optional(),
 });
 
 export const PuzzleSchema = z.object({
   imageUrl: z.string().url(),
   gridSize: z.number().int().min(2).max(10).default(3),
+  seed: z.number().int().optional(),
 });
+
+export const TemplateTypeSchema = z.enum([
+  "trivia",
+  "puzzle",
+  "word_search",
+  "fake_news",
+  "crossword",
+  "memory",
+  "snakes_ladders",
+]);
 
 export const LevelMetadataSchema = z.object({
   id: z.string().uuid(),
@@ -129,21 +134,12 @@ export const LevelMetadataSchema = z.object({
   creation_date: z.string(),
   color: z.string().min(1),
   difficulty: z.number().int().min(1).max(10),
-  template_type: z.enum([
-    "TRIVIA", 
-    "FAKE_NEWS", 
-    "MEMORY", 
-    "WORD_SEARCH", 
-    "PUZZLE", 
-    "CROSSWORD", 
-    "SNAKES"
-  ]),
+  template_type: TemplateTypeSchema,
 });
 
 export const LevelExportSchema = z.object({
   metadata: LevelMetadataSchema,
   content: z.union([
-    z.array(FlashcardSchema),
     z.array(MultipleChoiceSchema),
     DragAndDropSchema,
     MemorySchema,
@@ -155,7 +151,6 @@ export const LevelExportSchema = z.object({
   ]),
 });
 
-export type Flashcard = z.infer<typeof FlashcardSchema>;
 export type MultipleChoice = z.infer<typeof MultipleChoiceSchema>;
 export type DragAndDropItem = z.infer<typeof DragAndDropItemSchema>;
 export type DragAndDrop = z.infer<typeof DragAndDropSchema>;
@@ -167,6 +162,7 @@ export type CrosswordWord = z.infer<typeof CrosswordWordSchema>;
 export type Crossword = z.infer<typeof CrosswordSchema>;
 export type WordSearch = z.infer<typeof WordSearchSchema>;
 export type Puzzle = z.infer<typeof PuzzleSchema>;
-export { type Snakes } from "./snakes";
+export { SnakesSchema, type Snakes } from "./snakes";
+export type TemplateType = z.infer<typeof TemplateTypeSchema>;
 export type LevelMetadata = z.infer<typeof LevelMetadataSchema>;
 export type LevelExport = z.infer<typeof LevelExportSchema>;

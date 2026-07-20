@@ -1,6 +1,8 @@
 package auth
 
 import (
+	"time"
+
 	"github.com/altair/usbi-backend/internal/domain"
 	"github.com/google/uuid"
 )
@@ -31,9 +33,16 @@ type LoginRequest struct {
 // LoginResponse is returned on successful login.
 // User is typed as domain.User — never contains PII or crypto material.
 type LoginResponse struct {
-	AccessToken string      `json:"access_token"`
-	TokenType   string      `json:"token_type"`
-	User        domain.User `json:"user"`
+	AccessToken           string      `json:"access_token"`
+	RefreshToken          string      `json:"refresh_token"`
+	TokenType             string      `json:"token_type"`
+	AccessTokenExpiresIn  int64       `json:"access_token_expires_in"`
+	RefreshTokenExpiresAt time.Time   `json:"refresh_token_expires_at"`
+	User                  domain.User `json:"user"`
+}
+
+type RefreshRequest struct {
+	RefreshToken string `json:"refresh_token"`
 }
 
 // TutorConsentRequest is the body for POST /api/v1/auth/tutor-consent.
@@ -49,4 +58,27 @@ type TutorConsentRequest struct {
 type ArcoRequestDTO struct {
 	RequestType domain.ArcoRequestType `json:"request_type"`
 	Details     string                 `json:"details,omitempty"`
+}
+
+type ArcoResponseDTO struct {
+	RequestID uuid.UUID `json:"request_id"`
+	Status    string    `json:"status"`
+	Message   string    `json:"message"`
+}
+
+type ArcoPendingItemDTO struct {
+	ID            uuid.UUID `json:"id"`
+	RequesterType string    `json:"requester_type"`
+	RequestType   string    `json:"request_type"`
+	Status        string    `json:"status"`
+	ReceivedAt    time.Time `json:"received_at"`
+}
+
+type ArcoPendingListDTO struct {
+	Items []ArcoPendingItemDTO `json:"items"`
+}
+
+type ResolveArcoRequestDTO struct {
+	Approved        bool   `json:"approved"`
+	ResponseSummary string `json:"response_summary"`
 }

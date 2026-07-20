@@ -81,6 +81,27 @@ paths:
         '500':
           $ref: '#/components/responses/InternalServerError'
 
+  /auth/refresh:
+    post:
+      summary: Renovar sesión con refresh token opaco
+      operationId: refreshSession
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RefreshRequestDTO'
+      responses:
+        '200':
+          description: Tokens rotados.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoginResponseDTO'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
   /auth/tutor-consent:
     post:
       summary: Registro de consentimiento de tutor para usuarios menores
@@ -110,8 +131,9 @@ paths:
       operationId: ageUpTransition
       description: |
         Endpoint manual de auto-servicio. El usuario solicita explícitamente
-        la actualización de is_adult=true. Limitado a 3 intentos por cuenta,
-        rastreados en DB. NO se ejecuta como cron job.
+        la actualización de is_adult=true. La transición minimiza los datos
+        identificables del tutor asociados a la cuenta. Limitado a 3 intentos
+        por cuenta, rastreados en DB. NO se ejecuta como cron job.
       responses:
         '200':
           description: Transición aceptada. is_adult actualizado.
@@ -133,9 +155,10 @@ paths:
       summary: Sincronización de progreso offline (idempotente)
       operationId: syncOfflineProgress
       description: |
-        Recibe progreso generado offline. Valida HMAC, aplica Additive Merge
-        con FOR UPDATE. Idempotente por sync_event_id (UUID). Si el UUID ya
-        existe, devuelve 200 OK sin duplicar XP.
+        Recibe progreso generado offline. Valida HMAC sobre una cadena técnica
+        canónica derivada de sync_event_id, user_id, device_id, crypto_key_version
+        y payload. El device_id debe haber sido registrado por el backend.
+        Recalcula XP en servidor y aplica merge idempotente por sync_event_id.
       requestBody:
         required: true
         content:
@@ -181,6 +204,10 @@ paths:
       responses:
         '201':
           description: Solicitud ARCO registrada con evidence_hash.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ArcoResponseDTO'
         '400':
           $ref: '#/components/responses/BadRequest'
         '401':
@@ -188,9 +215,177 @@ paths:
         '500':
           $ref: '#/components/responses/InternalServerError'
 
+  /arco/pending:
+    get:
+      summary: Listar solicitudes ARCO pendientes
+      operationId: listPendingArcoRequests
+      description: Sólo admin/director. Devuelve metadatos técnicos sin PII.
+      parameters:
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 50
+      responses:
+        '200':
+          description: Solicitudes pendientes.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ArcoPendingListDTO'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /arco/{request_id}/resolve:
+    post:
+      summary: Resolver solicitud ARCO
+      operationId: resolveArcoRequest
+      description: |
+        Sólo admin/director. Si la solicitud aprobada es de cancelación,
+        pseudonimiza PII, revoca sesiones y marca dispositivos para borrado local.
+      parameters:
+        - in: path
+          name: request_id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ResolveArcoRequestDTO'
+      responses:
+        '200':
+          description: Solicitud resuelta.
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /devices:
+    get:
+      summary: Listar dispositivos registrados del usuario autenticado
+      operationId: listDevices
+      responses:
+        '200':
+          description: Dispositivos activos del usuario.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeviceListResponseDTO'
+    post:
+      summary: Registrar dispositivo para sincronización offline
+      operationId: registerDevice
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegisterDeviceRequestDTO'
+      responses:
+        '201':
+          description: Dispositivo registrado. Usar `id` como device_id en sync.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeviceDTO'
+
+  /sections:
+    get:
+      summary: Listar secciones oficiales
+      operationId: listSections
+      parameters:
+        - in: query
+          name: include_unpublished
+          schema:
+            type: boolean
+            default: false
+          description: Sólo admin/operator/director puede ver borradores.
+      responses:
+        '200':
+          description: Lista de secciones visibles para el rol autenticado.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SectionListResponseDTO'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+    post:
+      summary: Crear sección oficial
+      operationId: createSection
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateSectionRequestDTO'
+      responses:
+        '201':
+          description: Sección creada como borrador.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SectionDTO'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /sections/{section_id}:
+    patch:
+      summary: Actualizar sección oficial
+      operationId: updateSection
+      parameters:
+        - $ref: '#/components/parameters/SectionID'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateSectionRequestDTO'
+      responses:
+        '200':
+          description: Sección actualizada.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SectionDTO'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /sections/{section_id}/publish:
+    post:
+      summary: Publicar sección
+      operationId: publishSection
+      parameters:
+        - $ref: '#/components/parameters/SectionID'
+      responses:
+        '200':
+          description: Sección publicada.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SectionDTO'
+
+  /sections/{section_id}/archive:
+    post:
+      summary: Archivar sección
+      operationId: archiveSection
+      parameters:
+        - $ref: '#/components/parameters/SectionID'
+      responses:
+        '200':
+          description: Sección archivada.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SectionDTO'
+
   /levels:
     get:
-      summary: Listar secciones y niveles publicados
+      summary: Listar niveles oficiales
       operationId: listLevels
       parameters:
         - in: query
@@ -199,16 +394,22 @@ paths:
             type: string
             format: uuid
         - in: query
-          name: limit
+          name: cursor
+          schema:
+            type: string
+            format: uuid
+        - in: query
+          name: page_size
           schema:
             type: integer
             default: 20
-            maximum: 100
+            maximum: 50
         - in: query
-          name: offset
+          name: include_unpublished
           schema:
-            type: integer
-            default: 0
+            type: boolean
+            default: false
+          description: Sólo admin/operator/director puede ver borradores.
       responses:
         '200':
           description: Lista paginada de niveles publicados.
@@ -245,7 +446,117 @@ paths:
         '500':
           $ref: '#/components/responses/InternalServerError'
 
+  /levels/{level_id}:
+    get:
+      summary: Obtener nivel oficial con contenido
+      operationId: getLevel
+      parameters:
+        - $ref: '#/components/parameters/LevelID'
+      responses:
+        '200':
+          description: Nivel oficial.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LevelDTO'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    patch:
+      summary: Actualizar nivel oficial
+      operationId: updateLevel
+      parameters:
+        - $ref: '#/components/parameters/LevelID'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateLevelRequestDTO'
+      responses:
+        '200':
+          description: Nivel actualizado.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LevelDTO'
+
+  /levels/{level_id}/publish:
+    post:
+      summary: Publicar nivel oficial
+      operationId: publishLevel
+      parameters:
+        - $ref: '#/components/parameters/LevelID'
+      responses:
+        '200':
+          description: Nivel publicado.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LevelDTO'
+
+  /levels/{level_id}/archive:
+    post:
+      summary: Archivar nivel oficial
+      operationId: archiveLevel
+      parameters:
+        - $ref: '#/components/parameters/LevelID'
+      responses:
+        '200':
+          description: Nivel archivado.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LevelDTO'
+
+  /levels/{level_id}/complete:
+    post:
+      summary: Completar partida oficial online
+      operationId: completeLevel
+      parameters:
+        - $ref: '#/components/parameters/LevelID'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CompleteLevelRequestDTO'
+      responses:
+        '200':
+          description: Resultado oficial con XP calculada por backend.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CompleteLevelResponseDTO'
+
+  /profile/progress:
+    get:
+      summary: Obtener progreso oficial del usuario autenticado
+      operationId: getProfileProgress
+      responses:
+        '200':
+          description: Progreso oficial.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProfileProgressResponseDTO'
+
 components:
+  parameters:
+    SectionID:
+      in: path
+      name: section_id
+      required: true
+      schema:
+        type: string
+        format: uuid
+    LevelID:
+      in: path
+      name: level_id
+      required: true
+      schema:
+        type: string
+        format: uuid
+
   securitySchemes:
     bearerAuth:
       type: http
@@ -304,11 +615,27 @@ components:
         access_token:
           type: string
           description: JWT firmado. Almacenar EXCLUSIVAMENTE en Tauri Plugin Store, nunca en window.
+        refresh_token:
+          type: string
+          description: Token opaco de 7 días. Se guarda sólo como HMAC en servidor.
         token_type:
           type: string
           enum: [Bearer]
+        access_token_expires_in:
+          type: integer
+          example: 900
+        refresh_token_expires_at:
+          type: string
+          format: date-time
         user:
           $ref: '#/components/schemas/UserDTO'
+
+    RefreshRequestDTO:
+      type: object
+      required: [refresh_token]
+      properties:
+        refresh_token:
+          type: string
 
     TutorConsentRequestDTO:
       type: object
@@ -388,7 +715,7 @@ components:
         xp_awarded:
           type: integer
           minimum: 0
-          description: XP calculada localmente. El backend RECALCULARÁ este valor con FOR UPDATE. No se confía en este campo.
+          description: XP calculada localmente. El backend recalcula este valor con dificultad oficial, número de intento y lock transaccional. No se confía en este campo.
         completed:
           type: boolean
 
@@ -414,7 +741,7 @@ components:
         hmac_signature:
           type: string
           format: byte
-          description: HMAC-SHA256 de concat(user_id, xp_total, timestamp_unix). Base64.
+          description: HMAC-SHA256 Base64 de la cadena canónica `sync_event_id|user_id|device_id|crypto_key_version|attempts|streak_dates|badge_ids`.
 
     SyncEventResponseDTO:
       type: object
@@ -430,6 +757,52 @@ components:
         server_xp_total:
           type: integer
           description: XP total en servidor post-merge para validación en cliente.
+        badges_awarded:
+          type: array
+          items:
+            type: string
+            format: uuid
+
+    RegisterDeviceRequestDTO:
+      type: object
+      required: [device_label, platform]
+      properties:
+        device_label:
+          type: string
+        platform:
+          type: string
+          enum: [web, tauri]
+
+    DeviceDTO:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        user_id:
+          type: string
+          format: uuid
+        device_label:
+          type: string
+        platform:
+          type: string
+          enum: [web, tauri]
+        registered_at:
+          type: string
+          format: date-time
+        last_seen_at:
+          type: string
+          format: date-time
+        wipe_local_data:
+          type: boolean
+
+    DeviceListResponseDTO:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/DeviceDTO'
 
     # ── ARCO ──────────────────────────────────────────────────────────────────
     ArcoRequestDTO:
@@ -443,7 +816,93 @@ components:
           type: string
           maxLength: 1000
 
+    ArcoResponseDTO:
+      type: object
+      required: [request_id, status, message]
+      properties:
+        request_id:
+          type: string
+          format: uuid
+        status:
+          type: string
+          enum: [pending]
+        message:
+          type: string
+
+    ArcoPendingItemDTO:
+      type: object
+      required: [id, requester_type, request_type, status, received_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+        requester_type:
+          type: string
+        request_type:
+          type: string
+          enum: [acceso, rectificacion, cancelacion, oposicion]
+        status:
+          type: string
+          enum: [pending]
+        received_at:
+          type: string
+          format: date-time
+
+    ArcoPendingListDTO:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/ArcoPendingItemDTO'
+
+    ResolveArcoRequestDTO:
+      type: object
+      required: [approved, response_summary]
+      properties:
+        approved:
+          type: boolean
+        response_summary:
+          type: string
+          maxLength: 1000
+
     # ── Levels ────────────────────────────────────────────────────────────────
+    SectionDTO:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        title:
+          type: string
+        color:
+          type: string
+        is_published:
+          type: boolean
+        created_by_admin_id:
+          type: string
+          format: uuid
+        created_at:
+          type: string
+          format: date-time
+
+    CreateSectionRequestDTO:
+      type: object
+      required: [title, color]
+      properties:
+        title:
+          type: string
+        color:
+          type: string
+
+    SectionListResponseDTO:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/SectionDTO'
+
     LevelDTO:
       type: object
       properties:
@@ -459,12 +918,21 @@ components:
           type: string
         template_type:
           type: string
+          enum: [trivia, puzzle, word_search, fake_news, crossword, memory, snakes_ladders]
+        content:
+          description: "JSON de contenido validado por template_type. Trivia acepta arreglo de preguntas o `{ questions: [...] }`."
         difficulty:
           type: integer
           minimum: 1
           maximum: 10
         is_published:
           type: boolean
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
 
     CreateLevelRequestDTO:
       type: object
@@ -479,8 +947,11 @@ components:
           type: string
         template_type:
           type: string
+          enum: [trivia, puzzle, word_search, fake_news, crossword, memory, snakes_ladders]
         content:
-          type: object
+          oneOf:
+            - type: object
+            - type: array
           description: Estructura JSON validada por Zod en packages/schema. Máx 5MB (RF36).
         difficulty:
           type: integer
@@ -490,16 +961,102 @@ components:
     LevelListResponseDTO:
       type: object
       properties:
-        data:
+        items:
           type: array
           items:
             $ref: '#/components/schemas/LevelDTO'
-        total:
+        next_cursor:
+          type: string
+          format: uuid
+
+    CompleteLevelRequestDTO:
+      type: object
+      required: [score, completed]
+      properties:
+        score:
           type: integer
-        limit:
+          minimum: 0
+        completed:
+          type: boolean
+        answers:
+          description: Resumen técnico de respuestas. No se usa para calcular XP.
+        client_finished_at:
+          type: string
+          format: date-time
+
+    CompleteLevelResponseDTO:
+      type: object
+      properties:
+        level_id:
+          type: string
+          format: uuid
+        completed:
+          type: boolean
+        attempt_number:
           type: integer
-        offset:
+        xp_awarded:
           type: integer
+        total_xp:
+          type: integer
+        current_streak:
+          type: integer
+        badges_awarded:
+          type: array
+          items:
+            $ref: '#/components/schemas/BadgeDTO'
+
+    BadgeDTO:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        xp_threshold:
+          type: integer
+        icon_key:
+          type: string
+        earned_at:
+          type: string
+          format: date-time
+
+    ProfileProgressResponseDTO:
+      type: object
+      properties:
+        total_xp:
+          type: integer
+        completed_levels:
+          type: integer
+        total_attempts:
+          type: integer
+        current_streak:
+          type: integer
+        badges:
+          type: array
+          items:
+            $ref: '#/components/schemas/BadgeDTO'
+        levels:
+          type: array
+          items:
+            type: object
+            properties:
+              level_id:
+                type: string
+                format: uuid
+              title:
+                type: string
+              template_type:
+                type: string
+                enum: [trivia, puzzle, word_search, fake_news, crossword, memory, snakes_ladders]
+              difficulty:
+                type: integer
+              best_score:
+                type: integer
+              xp_total_for_level:
+                type: integer
+              attempts_count:
+                type: integer
 
     # ── RFC 7807 ──────────────────────────────────────────────────────────────
     ProblemDetails:

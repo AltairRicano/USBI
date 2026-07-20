@@ -5,9 +5,14 @@ WHERE email_lookup_hash = $1 AND deleted_at IS NULL;
 
 -- name: CreateUser :one
 INSERT INTO users (
-    id, full_name, email, email_lookup_hash, password_hash, token_version, is_adult, role, privacy_notice_version, privacy_notice_accepted_at, privacy_acceptance_hash, crypto_key_version, status
+    id, full_name, email, email_lookup_hash, phone, phone_lookup_hash, password_hash, token_version, is_adult, role, privacy_notice_version, privacy_notice_accepted_at, privacy_acceptance_hash, crypto_key_version, status
 ) VALUES (
-    $1, $2, pgp_sym_encrypt($3::text, sqlc.arg('encryption_key')::text), $4, $5, $6, $7, $8, $9, $10, $11, $12, $13
+    $1, $2,
+    pgp_sym_encrypt($3::text, sqlc.arg('encryption_key')::text),
+    $4,
+    CASE WHEN $5::text = '' THEN NULL ELSE pgp_sym_encrypt($5::text, sqlc.arg('encryption_key')::text) END,
+    $6,
+    $7, $8, $9, $10, $11, $12, $13, $14, $15
 )
 RETURNING *;
 
@@ -32,8 +37,7 @@ INSERT INTO player_progress (
 -- name: GetLevelAttemptsByDate :one
 SELECT COUNT(*) as attempt_number 
 FROM level_attempts 
-WHERE user_id = $1 AND level_id = $2 AND attempt_date = $3
-FOR UPDATE;
+WHERE user_id = $1 AND level_id = $2 AND attempt_date = $3;
 
 -- name: InsertLevelAttempt :exec
 INSERT INTO level_attempts (
@@ -58,9 +62,9 @@ INSERT INTO experience_history (
 
 -- name: InsertSyncEvent :exec
 INSERT INTO sync_events (
-    id, device_id, user_id, payload_hash, hmac_signature, crypto_key_version, hmac_valid, status
+    id, device_id, user_id, payload, payload_hash, hmac_signature, crypto_key_version, hmac_valid, status
 ) VALUES (
-    $1, $2, $3, $4, $5, $6, $7, $8
+    $1, $2, $3, $4, $5, $6, $7, $8, $9
 );
 
 -- name: UpdateSyncEventStatus :exec
@@ -73,10 +77,10 @@ SELECT token_version FROM users WHERE id = $1 AND deleted_at IS NULL;
 UPDATE users SET token_version = token_version + 1, updated_at = NOW() WHERE id = $1;
 
 -- name: IncrementAgeUpAttempts :one
-UPDATE users SET age_up_attempts = age_up_attempts + 1, updated_at = NOW() WHERE id = $1 RETURNING age_up_attempts;
+UPDATE users SET age_up_attempts = age_up_attempts + 1, updated_at = NOW() WHERE id = $1 AND deleted_at IS NULL RETURNING age_up_attempts;
 
 -- name: UpdateUserAdultStatus :exec
-UPDATE users SET is_adult = true, status = 'active', updated_at = NOW() WHERE id = $1;
+UPDATE users SET is_adult = true, status = 'active', updated_at = NOW() WHERE id = $1 AND deleted_at IS NULL;
 
 -- name: InsertArcoRequest :exec
 INSERT INTO arco_requests (

@@ -1,42 +1,22 @@
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { lazy, Suspense, useEffect } from 'react';
+import { BrowserRouter, Routes, Route, Navigate, useNavigate } from 'react-router-dom';
 import { ProtectedRoute } from './features/auth/ProtectedRoute';
-import LoginPage from './features/auth/LoginPage';
-import RegisterPage from './features/auth/RegisterPage';
-import DashboardPage from './features/dashboard/DashboardPage';
-import { MakerPage } from './features/maker';
-import { FakeNewsGame } from './features/games/components/FakeNewsGame';
-import { MemoryGame } from './features/games/components/MemoryGame';
-import { SnakeLadderGame } from './features/games/components/SnakeLadderGame';
-import { TriviaGame } from './features/games/TriviaGame';
-import { WordSearchGame } from './features/games/WordSearchGame';
-import { PuzzleGame } from './features/games/PuzzleGame';
-import { CrosswordGame } from './features/games/CrosswordGame';
 
-import { Snakes, FakeNewsItem, MultipleChoice } from '@usbi/schema';
-
-// Placeholder levels for games
-const mockSnakesLevel: Snakes = {
-  board_width: 10, board_height: 10, start_position: 1, end_position: 100, snakes: [{start: 16, end: 6}], ladders: [{start: 2, end: 15}], ai_config: { difficulty: 'EASY' }
-};
-
-const mockFakeNews: FakeNewsItem[] = [
-  { title: 'Test News', content: 'This is a test news', reference: '', imageUrl: '', isFake: true, explanation: 'Test explanation' }
-];
-
-const mockTriviaLevel: MultipleChoice[] = [
-  { question: '¿Cuál es la capital de Veracruz?', options: ['Xalapa', 'Veracruz', 'Boca del Río', 'Córdoba'], correct_index: 0 }
-];
-
-const mockCrosswordLevel = {
-  words: [
-    { word: 'XALAPA', clue: 'Capital de Veracruz' },
-    { word: 'UV', clue: 'Universidad Veracruzana' }
-  ]
-};
+const LoginPage = lazy(() => import('./features/auth/LoginPage'));
+const RegisterPage = lazy(() => import('./features/auth/RegisterPage'));
+const DashboardPage = lazy(() => import('./features/dashboard/DashboardPage'));
+const MakerPage = lazy(() => import('./features/maker').then((mod) => ({ default: mod.MakerPage })));
+const AdminContentPage = lazy(() => import('./features/content/AdminContentPage').then((mod) => ({ default: mod.AdminContentPage })));
+const OfficialLevelPage = lazy(() => import('./features/content/OfficialLevelPage').then((mod) => ({ default: mod.OfficialLevelPage })));
+const SectionLevelsPage = lazy(() => import('./features/content/SectionLevelsPage').then((mod) => ({ default: mod.SectionLevelsPage })));
+const ProfilePage = lazy(() => import('./features/profile/ProfilePage').then((mod) => ({ default: mod.ProfilePage })));
+const ArcoRequestPage = lazy(() => import('./features/arco/ArcoPage').then((mod) => ({ default: mod.ArcoRequestPage })));
+const ArcoAdminPage = lazy(() => import('./features/arco/ArcoPage').then((mod) => ({ default: mod.ArcoAdminPage })));
 
 export default function App() {
   return (
     <BrowserRouter>
+      <AuthEventBridge />
       {/* SVG para filtros daltónicos globales */}
       <svg style={{ position: 'absolute', width: 0, height: 0, overflow: 'hidden' }} aria-hidden="true">
         <defs>
@@ -63,111 +43,125 @@ export default function App() {
           </filter>
         </defs>
       </svg>
-      <Routes>
-        {/* Raíz → login */}
-        <Route path="/" element={<Navigate to="/login" replace />} />
+      <Suspense fallback={<RouteFallback />}>
+        <Routes>
+          {/* Raíz → login */}
+          <Route path="/" element={<Navigate to="/login" replace />} />
 
-        {/* Rutas públicas */}
-        <Route path="/login" element={<LoginPage />} />
-        <Route path="/register" element={<RegisterPage />} />
+          {/* Rutas públicas */}
+          <Route path="/login" element={<LoginPage />} />
+          <Route path="/register" element={<RegisterPage />} />
 
-        {/* Rutas protegidas */}
-        <Route
-          path="/dashboard"
-          element={
-            <ProtectedRoute>
-              <DashboardPage />
-            </ProtectedRoute>
-          }
-        />
+          {/* Rutas protegidas */}
+          <Route
+            path="/dashboard"
+            element={
+              <ProtectedRoute>
+                <DashboardPage />
+              </ProtectedRoute>
+            }
+          />
 
-        <Route
-          path="/games/fake-news"
-          element={
-            <ProtectedRoute>
-              <FakeNewsGame news={mockFakeNews} onComplete={(score, max) => console.log('Score:', score, max)} />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/games/memorama"
-          element={
-            <ProtectedRoute>
-              <MemoryGame pairs={[{id: '1', content1: 'A', content2: 'A'}, {id: '2', content1: 'B', content2: 'B'}]} onComplete={(score, max) => console.log('Score:', score, max)} />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/games/snake-ladder"
-          element={
-            <ProtectedRoute>
-              <SnakeLadderGame level={mockSnakesLevel} onComplete={(score: number, max?: number) => console.log('Score:', score, max)} />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/games/trivia"
-          element={
-            <ProtectedRoute>
-              <TriviaGame questions={mockTriviaLevel} onFinish={(score: number) => console.log('Score:', score)} />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/games/word-search"
-          element={
-            <ProtectedRoute>
-              <WordSearchGame words={['VERACRUZ', 'XALAPA']} onFinish={(score: number) => console.log('Score:', score)} />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/games/puzzle"
-          element={
-            <ProtectedRoute>
-              <PuzzleGame imageUrl="" gridSize={3} onFinish={(score: number) => console.log('Score:', score)} />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/games/crossword"
-          element={
-            <ProtectedRoute>
-              <CrosswordGame words={mockCrosswordLevel.words} onFinish={(score: number) => console.log('Score:', score)} />
-            </ProtectedRoute>
-          }
-        />
+          <Route
+            path="/sections/:sectionId"
+            element={
+              <ProtectedRoute>
+                <SectionLevelsPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/levels/:levelId/play"
+            element={
+              <ProtectedRoute>
+                <OfficialLevelPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/profile"
+            element={
+              <ProtectedRoute>
+                <ProfilePage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/arco"
+            element={
+              <ProtectedRoute>
+                <ArcoRequestPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/admin"
+            element={
+              <ProtectedRoute allowedRoles={['admin', 'operator', 'director']}>
+                <AdminContentPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/admin/arco"
+            element={
+              <ProtectedRoute allowedRoles={['admin', 'director']}>
+                <ArcoAdminPage />
+              </ProtectedRoute>
+            }
+          />
 
-        <Route
-          path="/maker"
-          element={
-            <ProtectedRoute allowedRoles={['admin']}>
-              <MakerPage />
-            </ProtectedRoute>
-          }
-        />
+          <Route
+            path="/maker"
+            element={
+              <ProtectedRoute allowedRoles={['admin', 'operator', 'director']}>
+                <MakerPage />
+              </ProtectedRoute>
+            }
+          />
 
-        {/* Ruta de acceso denegado */}
-        <Route
-          path="/unauthorized"
-          element={
-            <main className="min-h-screen flex items-center justify-center">
-              <div className="text-center space-y-4">
-                <h1 style={{ color: 'var(--color-error)' }}>Acceso no autorizado</h1>
-                <p style={{ color: 'var(--color-muted)' }}>
-                  No tienes permiso para ver esta página.
-                </p>
-              </div>
-            </main>
-          }
-        />
+          {/* Ruta de acceso denegado */}
+          <Route
+            path="/unauthorized"
+            element={
+              <main className="min-h-screen flex items-center justify-center">
+                <div className="text-center space-y-4">
+                  <h1 style={{ color: 'var(--color-error)' }}>Acceso no autorizado</h1>
+                  <p style={{ color: 'var(--color-muted)' }}>
+                    No tienes permiso para ver esta página.
+                  </p>
+                </div>
+              </main>
+            }
+          />
 
-        {/* 404 */}
-        <Route
-          path="*"
-          element={<Navigate to="/login" replace />}
-        />
-      </Routes>
+          {/* 404 */}
+          <Route
+            path="*"
+            element={<Navigate to="/login" replace />}
+          />
+        </Routes>
+      </Suspense>
     </BrowserRouter>
   );
+}
+
+function RouteFallback() {
+  return (
+    <main className="min-h-screen p-6" style={{ backgroundColor: 'var(--color-surface)' }}>
+      <p className="text-[--color-muted]">Cargando...</p>
+    </main>
+  );
+}
+
+function AuthEventBridge() {
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    const handleUnauthorized = () => navigate('/login', { replace: true });
+    window.addEventListener('auth:unauthorized', handleUnauthorized);
+    return () => window.removeEventListener('auth:unauthorized', handleUnauthorized);
+  }, [navigate]);
+
+  return null;
 }

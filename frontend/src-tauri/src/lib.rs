@@ -1,24 +1,25 @@
 use hmac::{Hmac, Mac};
 use sha2::Sha256;
+use std::sync::atomic::{AtomicBool, Ordering};
 use tauri::{AppHandle, Emitter, Manager};
 use tokio::net::TcpStream;
 use tokio::sync::mpsc;
 use tokio::time::{sleep, Duration};
 
 type HmacSha256 = Hmac<Sha256>;
+static IS_GAME_ACTIVE: AtomicBool = AtomicBool::new(false);
 
 // ── Comandos IPC ──────────────────────────────────────────────────────────────
 
-/// Genera una firma HMAC-SHA256 del body JSON, codificada en Base64 estándar.
+/// Genera una firma HMAC-SHA256 de una cadena canónica, codificada en Base64.
 ///
-/// El body se pasa con hmac_signature="" (placeholder) tal como lo enviará
-/// el cliente al servidor, garantizando byte-for-byte fidelidad (patrón JWS).
 /// El secreto nunca sale del proceso Rust — JS solo recibe la firma resultante.
 #[tauri::command]
-async fn sign_payload(secret: String, payload_json: String) -> Result<String, String> {
-    use base64::{Engine as _, engine::general_purpose};
-    let mut mac = HmacSha256::new_from_slice(secret.as_bytes())
-        .map_err(|e| e.to_string())?;
+async fn sign_payload(payload_json: String) -> Result<String, String> {
+    use base64::{engine::general_purpose, Engine as _};
+    let secret = std::env::var("USBI_HMAC_SECRET")
+        .map_err(|_| "USBI_HMAC_SECRET no está configurado".to_string())?;
+    let mut mac = HmacSha256::new_from_slice(secret.as_bytes()).map_err(|e| e.to_string())?;
     mac.update(payload_json.as_bytes());
     Ok(general_purpose::STANDARD.encode(mac.finalize().into_bytes()))
 }
@@ -36,42 +37,50 @@ async fn wipe_local_data(app: AppHandle) -> Result<(), String> {
     let db_path = app_dir.join("usbi_local.db");
 
     if db_path.exists() {
-        std::fs::remove_file(&db_path).map_err(|e| {
-            format!("Error eliminando base de datos local: {}", e)
-        })?;
+        std::fs::remove_file(&db_path)
+            .map_err(|e| format!("Error eliminando base de datos local: {}", e))?;
     }
     Ok(())
 }
 
+#[tauri::command]
+fn set_game_status(is_playing: bool) -> bool {
+    IS_GAME_ACTIVE.store(is_playing, Ordering::SeqCst);
+    IS_GAME_ACTIVE.load(Ordering::SeqCst)
+}
+
+#[tauri::command]
+fn get_game_status() -> bool {
+    IS_GAME_ACTIVE.load(Ordering::SeqCst)
+}
+
 // ── Worker de red ─────────────────────────────────────────────────────────────
 
-/// Monitorea la conectividad con el backend LAN en segundo plano.
+/// Monitorea la conectividad con el backend en segundo plano.
 ///
 /// Emite el evento `network-status` (bool) hacia el frontend cuando cambia el
 /// estado. Solo emite en cambios para no saturar el canal IPC.
 ///
-/// Puerto: usa el puerto externo del contenedor Docker (8088 en LAN),
-/// no el puerto interno (8080). Configurable vía variable de entorno
-/// USBI_BACKEND_ADDR en futuras versiones.
+/// Configurable vía variable de entorno USBI_BACKEND_ADDR.
 fn start_network_ping(app: AppHandle) {
     let (tx, mut rx) = mpsc::channel::<bool>(4);
+    let backend_addr =
+        std::env::var("USBI_BACKEND_ADDR").unwrap_or_else(|_| "127.0.0.1:8088".to_string());
 
     // Worker de ping — se ejecuta en tokio task
     tokio::spawn(async move {
         loop {
-            let is_online = tokio::time::timeout(
-                Duration::from_secs(2),
-                TcpStream::connect("192.168.1.210:8088"), // Puerto externo Docker
-            )
-            .await
-            .map(|r| r.is_ok())
-            .unwrap_or(false);
+            let addr = backend_addr.clone();
+            let is_online = tokio::time::timeout(Duration::from_secs(2), TcpStream::connect(addr))
+                .await
+                .map(|r| r.is_ok())
+                .unwrap_or(false);
 
             // Si el receptor fue descartado, terminar el worker graciosamente
             if tx.send(is_online).await.is_err() {
                 break;
             }
-            sleep(Duration::from_secs(5)).await;
+            sleep(Duration::from_secs(60)).await;
         }
     });
 
@@ -95,6 +104,8 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_store::Builder::new().build())
         .plugin(tauri_plugin_sql::Builder::new().build())
+        .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_opener::init())
         .setup(|app| {
             let handle = app.handle().clone();
@@ -103,7 +114,9 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             sign_payload,
-            wipe_local_data
+            wipe_local_data,
+            set_game_status,
+            get_game_status
         ])
         .run(tauri::generate_context!())
         .expect("error al iniciar la aplicación Tauri");

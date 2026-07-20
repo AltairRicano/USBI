@@ -63,7 +63,7 @@ const (
 
 // LevelAttemptItem represents a single level attempt from an offline sync payload.
 // NOTE: xp_awarded is provided by the client but MUST be recalculated by Go
-// backend using SELECT ... FOR UPDATE on level_attempts. Client value is untrusted.
+// backend using official level difficulty and transactional locking. Client value is untrusted.
 type LevelAttemptItem struct {
 	LevelID       uuid.UUID `json:"level_id"`
 	AttemptDate   string    `json:"attempt_date"` // ISO 8601 date: YYYY-MM-DD
@@ -82,7 +82,7 @@ type SyncPayload struct {
 
 // SyncEventRequest is the incoming body for POST /api/v1/sync.
 type SyncEventRequest struct {
-	SyncEventID      uuid.UUID   `json:"sync_event_id"`       // Idempotency key
+	SyncEventID      uuid.UUID   `json:"sync_event_id"` // Idempotency key
 	UserID           uuid.UUID   `json:"user_id"`
 	DeviceID         uuid.UUID   `json:"device_id"`
 	CryptoKeyVersion int         `json:"crypto_key_version"`
@@ -92,9 +92,10 @@ type SyncEventRequest struct {
 
 // SyncEventResponse is returned by POST /api/v1/sync.
 type SyncEventResponse struct {
-	Status        string `json:"status"`          // "synced" | "already_processed"
-	WipeLocalData bool   `json:"wipe_local_data"` // ARCO cancellation flag
-	ServerXPTotal int    `json:"server_xp_total"` // Post-merge total for client validation
+	Status        string      `json:"status"`          // "synced" | "already_processed"
+	WipeLocalData bool        `json:"wipe_local_data"` // ARCO cancellation flag
+	ServerXPTotal int         `json:"server_xp_total"` // Post-merge total for client validation
+	BadgesAwarded []uuid.UUID `json:"badges_awarded,omitempty"`
 }
 
 // ProblemDetails implements RFC 7807 for all error responses.
@@ -128,4 +129,3 @@ type ContextKey string
 
 // ClaimsKey is the context key for storing JWT claims in the request context.
 const ClaimsKey ContextKey = "jwt_claims"
-

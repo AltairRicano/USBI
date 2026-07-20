@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
+import { getSessionPersistenceStorage } from '../lib/persistenceStorage';
 
 // ── Tipos estrictos — espeja exactamente domain.User y domain.UserRole en Go ─
 export type UserRole = 'admin' | 'operator' | 'director' | 'player';
@@ -22,8 +23,10 @@ export interface User {
 export interface AuthState {
   user: User | null;
   token: string | null;
+  refreshToken: string | null;
   isAuthenticated: boolean;
-  login: (user: User, token: string) => void;
+  login: (user: User, token: string, refreshToken?: string | null) => void;
+  updateUser: (user: User) => void;
   logout: () => void;
 }
 
@@ -34,17 +37,21 @@ export const useAuthStore = create<AuthState>()(
     (set) => ({
       user: null,
       token: null,
+      refreshToken: null,
       isAuthenticated: false,
 
-      login: (user: User, token: string) =>
-        set({ user, token, isAuthenticated: true }),
+      login: (user: User, token: string, refreshToken = null) =>
+        set({ user, token, refreshToken, isAuthenticated: true }),
+
+      updateUser: (user: User) =>
+        set({ user }),
 
       logout: () =>
-        set({ user: null, token: null, isAuthenticated: false }),
+        set({ user: null, token: null, refreshToken: null, isAuthenticated: false }),
     }),
     {
       name: 'usbi-auth',
-      storage: createJSONStorage(() => sessionStorage),
+      storage: createJSONStorage(getSessionPersistenceStorage),
     }
   )
 );

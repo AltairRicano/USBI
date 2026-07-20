@@ -22,12 +22,11 @@ func NewHandler(svc *Service) *Handler {
 // SyncData handles POST /api/v1/sync.
 //
 // Security contract:
-//   - The HMAC is verified over the raw request body bytes, NOT a re-marshaled
-//     version, to guarantee byte-for-byte fidelity with the client-signed payload.
+//   - The HMAC is verified over a canonical technical payload, not over raw JSON.
 //   - hmac_signature in the JSON body is base64-encoded bytes (standard encoding).
 //   - The user_id in the body MUST match the JWT claims (checked by middleware).
 func (h *Handler) SyncData(w http.ResponseWriter, r *http.Request) {
-	// Read the raw body ONCE — it's needed both for JSON decoding and HMAC.
+	// Read the body once. HMAC verification uses the decoded canonical payload.
 	rawBody, err := io.ReadAll(r.Body)
 	if err != nil {
 		writeProblem(w, r, http.StatusBadRequest, "bad-request",
@@ -41,12 +40,14 @@ func (h *Handler) SyncData(w http.ResponseWriter, r *http.Request) {
 			"Bad Request", "Invalid JSON payload")
 		return
 	}
+	claims, ok := r.Context().Value(domain.ClaimsKey).(*domain.JWTClaims)
+	if !ok || claims.UserID != req.UserID {
+		writeProblem(w, r, http.StatusUnprocessableEntity, "invalid-sync-user",
+			"Invalid Sync Payload", "sync user_id must match the authenticated user")
+		return
+	}
 
-	// HMAC is transmitted as raw bytes in the JSON field ([]byte → base64 by json).
-	// The rawBody used for verification excludes the signature field itself —
-	// the signature is computed over the full request body including hmac_signature:""
-	// placeholder set by the client before signing. This is by design (same as JWS).
-	resp, err := h.svc.ProcessSync(r.Context(), req, rawBody, req.HMACSignature)
+	resp, err := h.svc.ProcessSync(r.Context(), req, req.HMACSignature)
 	if err != nil {
 		switch {
 		case errors.Is(err, ErrInvalidPayload):
@@ -62,7 +63,7 @@ func (h *Handler) SyncData(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	writeJSON(w, http.StatusAccepted, resp)
+	writeJSON(w, http.StatusOK, resp)
 }
 
 // ── Internal helpers ──────────────────────────────────────────────────────────

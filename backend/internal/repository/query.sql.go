@@ -80,9 +80,14 @@ func (q *Queries) CreateSection(ctx context.Context, arg CreateSectionParams) er
 
 const createUser = `-- name: CreateUser :one
 INSERT INTO users (
-    id, full_name, email, email_lookup_hash, password_hash, token_version, is_adult, role, privacy_notice_version, privacy_notice_accepted_at, privacy_acceptance_hash, crypto_key_version, status
+    id, full_name, email, email_lookup_hash, phone, phone_lookup_hash, password_hash, token_version, is_adult, role, privacy_notice_version, privacy_notice_accepted_at, privacy_acceptance_hash, crypto_key_version, status
 ) VALUES (
-    $1, $2, pgp_sym_encrypt($3::text, $14::text), $4, $5, $6, $7, $8, $9, $10, $11, $12, $13
+    $1, $2,
+    pgp_sym_encrypt($3::text, $16::text),
+    $4,
+    CASE WHEN $5::text = '' THEN NULL ELSE pgp_sym_encrypt($5::text, $16::text) END,
+    $6,
+    $7, $8, $9, $10, $11, $12, $13, $14, $15
 )
 RETURNING id, full_name, email, email_lookup_hash, phone, phone_lookup_hash, password_hash, token_version, is_adult, role, privacy_notice_version, privacy_notice_accepted_at, privacy_acceptance_hash, crypto_key_version, status, age_up_attempts, created_at, updated_at, last_login_at, deleted_at, deletion_reason
 `
@@ -92,6 +97,8 @@ type CreateUserParams struct {
 	FullName                string    `json:"full_name"`
 	Column3                 string    `json:"column_3"`
 	EmailLookupHash         []byte    `json:"email_lookup_hash"`
+	Phone                   string    `json:"phone"`
+	PhoneLookupHash         []byte    `json:"phone_lookup_hash"`
 	PasswordHash            string    `json:"password_hash"`
 	TokenVersion            int32     `json:"token_version"`
 	IsAdult                 bool      `json:"is_adult"`
@@ -110,6 +117,8 @@ func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (User, e
 		arg.FullName,
 		arg.Column3,
 		arg.EmailLookupHash,
+		arg.Phone,
+		arg.PhoneLookupHash,
 		arg.PasswordHash,
 		arg.TokenVersion,
 		arg.IsAdult,
@@ -152,7 +161,6 @@ const getLevelAttemptsByDate = `-- name: GetLevelAttemptsByDate :one
 SELECT COUNT(*) as attempt_number 
 FROM level_attempts 
 WHERE user_id = $1 AND level_id = $2 AND attempt_date = $3
-FOR UPDATE
 `
 
 type GetLevelAttemptsByDateParams struct {
@@ -244,7 +252,7 @@ func (q *Queries) GetUserTokenVersion(ctx context.Context, id uuid.UUID) (int32,
 }
 
 const incrementAgeUpAttempts = `-- name: IncrementAgeUpAttempts :one
-UPDATE users SET age_up_attempts = age_up_attempts + 1, updated_at = NOW() WHERE id = $1 RETURNING age_up_attempts
+UPDATE users SET age_up_attempts = age_up_attempts + 1, updated_at = NOW() WHERE id = $1 AND deleted_at IS NULL RETURNING age_up_attempts
 `
 
 func (q *Queries) IncrementAgeUpAttempts(ctx context.Context, id uuid.UUID) (int16, error) {
@@ -358,21 +366,22 @@ func (q *Queries) InsertLevelAttempt(ctx context.Context, arg InsertLevelAttempt
 
 const insertSyncEvent = `-- name: InsertSyncEvent :exec
 INSERT INTO sync_events (
-    id, device_id, user_id, payload_hash, hmac_signature, crypto_key_version, hmac_valid, status
+    id, device_id, user_id, payload, payload_hash, hmac_signature, crypto_key_version, hmac_valid, status
 ) VALUES (
-    $1, $2, $3, $4, $5, $6, $7, $8
+    $1, $2, $3, $4, $5, $6, $7, $8, $9
 )
 `
 
 type InsertSyncEventParams struct {
-	ID               uuid.UUID `json:"id"`
-	DeviceID         uuid.UUID `json:"device_id"`
-	UserID           uuid.UUID `json:"user_id"`
-	PayloadHash      []byte    `json:"payload_hash"`
-	HmacSignature    []byte    `json:"hmac_signature"`
-	CryptoKeyVersion int16     `json:"crypto_key_version"`
-	HmacValid        bool      `json:"hmac_valid"`
-	Status           string    `json:"status"`
+	ID               uuid.UUID       `json:"id"`
+	DeviceID         uuid.UUID       `json:"device_id"`
+	UserID           uuid.UUID       `json:"user_id"`
+	Payload          json.RawMessage `json:"payload"`
+	PayloadHash      []byte          `json:"payload_hash"`
+	HmacSignature    []byte          `json:"hmac_signature"`
+	CryptoKeyVersion int16           `json:"crypto_key_version"`
+	HmacValid        bool            `json:"hmac_valid"`
+	Status           string          `json:"status"`
 }
 
 func (q *Queries) InsertSyncEvent(ctx context.Context, arg InsertSyncEventParams) error {
@@ -380,6 +389,7 @@ func (q *Queries) InsertSyncEvent(ctx context.Context, arg InsertSyncEventParams
 		arg.ID,
 		arg.DeviceID,
 		arg.UserID,
+		arg.Payload,
 		arg.PayloadHash,
 		arg.HmacSignature,
 		arg.CryptoKeyVersion,
@@ -493,7 +503,7 @@ func (q *Queries) UpdateSyncEventStatus(ctx context.Context, arg UpdateSyncEvent
 }
 
 const updateUserAdultStatus = `-- name: UpdateUserAdultStatus :exec
-UPDATE users SET is_adult = true, status = 'active', updated_at = NOW() WHERE id = $1
+UPDATE users SET is_adult = true, status = 'active', updated_at = NOW() WHERE id = $1 AND deleted_at IS NULL
 `
 
 func (q *Queries) UpdateUserAdultStatus(ctx context.Context, id uuid.UUID) error {

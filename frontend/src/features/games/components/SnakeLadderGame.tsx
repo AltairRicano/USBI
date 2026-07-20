@@ -28,9 +28,11 @@ export const SnakeLadderGame: React.FC<SnakeLadderGameProps> = ({ level, onCompl
 
   useEffect(() => {
     // Notify Tauri that game started
-    invoke('set_game_status', { status: true }).catch(console.error);
+    invoke('set_game_status', { isPlaying: true }).catch(console.error);
     engine.start();
-    // initial state can be computed without effect inside interval
+    return () => {
+      invoke('set_game_status', { isPlaying: false }).catch(console.error);
+    };
   }, [engine]);
 
   const gameConfig: Phaser.Types.Core.GameConfig = useMemo(() => ({

@@ -31,6 +31,12 @@ export interface SyncEventResponse {
   status: string;          // "synced" | "already_processed"
   wipe_local_data: boolean; // Flag ARCO — si es true, limpiar SQLite
   server_xp_total: number;
+  badges_awarded?: string[];
+}
+
+export interface SyncProgressResult {
+  completed: boolean;
+  confirmedIds: string[];
 }
 
 // ── Retry Policy: Retroceso exponencial + Jitter (RNF11) ────────────────────
@@ -57,23 +63,46 @@ async function fetchWithRetry(
 // ── Motor de sincronización principal ────────────────────────────────────────
 
 /**
- * Firma el payload completo con HMAC-SHA256 vía Rust (sin exponer el secreto a JS).
- * El payload se serializa con hmac_signature="" para que la firma cubra el cuerpo
- * exacto tal como lo recibirá el servidor — mismo patrón que JWS.
+ * Firma una cadena técnica canónica con HMAC-SHA256 vía Rust.
+ * El secreto no sale del proceso Rust.
  */
 async function buildSignedRequest(
-  request: SyncEventRequest,
-  hmacSecret: string
+  request: SyncEventRequest
 ): Promise<SyncEventRequest> {
   const draftRequest: SyncEventRequest = { ...request, hmac_signature: '' };
-  const rawBody = JSON.stringify(draftRequest);
+  const signingPayload = buildCanonicalSigningPayload(draftRequest);
 
   const signature = await invoke<string>('sign_payload', {
-    secret: hmacSecret,
-    payloadJson: rawBody,
+    payloadJson: signingPayload,
   });
 
   return { ...draftRequest, hmac_signature: signature };
+}
+
+export function buildCanonicalSigningPayload(request: SyncEventRequest): string {
+  const attempts = [...request.payload.level_attempts]
+    .map((attempt) => [
+      attempt.level_id,
+      attempt.attempt_date,
+      String(attempt.attempt_number),
+      String(attempt.xp_awarded),
+      String(attempt.completed),
+    ].join(','))
+    .sort()
+    .join(';');
+
+  const streakDates = [...(request.payload.daily_streak_dates ?? [])].sort().join(';');
+  const badges = [...(request.payload.badge_ids_earned ?? [])].sort().join(';');
+
+  return [
+    request.sync_event_id,
+    request.user_id,
+    request.device_id,
+    String(request.crypto_key_version),
+    attempts,
+    streakDates,
+    badges,
+  ].join('|');
 }
 
 /**
@@ -87,14 +116,16 @@ async function buildSignedRequest(
  *   (solo en caso ARCO/revocación, no en sincronización normal).
  *
  * @param requests  Eventos de progreso offline a sincronizar.
- * @param hmacSecret  Clave HMAC obtenida del Store seguro en producción.
  */
 export async function syncLocalProgress(
-  requests: SyncEventRequest[],
-  hmacSecret: string
-): Promise<void> {
+  requests: SyncEventRequest[]
+): Promise<SyncProgressResult> {
   const syncStore = useSyncStore.getState();
-  if (syncStore.isSyncing || !syncStore.isOnline) return;
+  const confirmedIds: string[] = [];
+  if (syncStore.isSyncing || !syncStore.isOnline) return { completed: false, confirmedIds };
+
+  const isGameActive = await invoke<boolean>('get_game_status').catch(() => false);
+  if (isGameActive) return { completed: false, confirmedIds };
 
   syncStore.setSyncing(true);
 
@@ -110,10 +141,13 @@ export async function syncLocalProgress(
       }
 
       // Firma el body completo con HMAC-SHA256 vía Rust
-      const signedRequest = await buildSignedRequest(request, hmacSecret);
+      const signedRequest = await buildSignedRequest(request);
 
       // Envío con retries (Additive Merge y Last-Write-Wins los maneja el servidor Go)
       const response = await fetchWithRetry('/sync', signedRequest);
+      if (response.status === 'synced' || response.status === 'already_processed') {
+        confirmedIds.push(request.sync_event_id);
+      }
 
       // Si el servidor indica limpieza (ARCO/revocación), purgar SQLite local
       if (response.wipe_local_data) {
@@ -125,8 +159,10 @@ export async function syncLocalProgress(
     }
 
     syncStore.recordSyncSuccess();
+    return { completed: confirmedIds.length === requests.length, confirmedIds };
   } catch (error) {
     console.error('[SyncEngine] Error durante sincronización:', error);
+    return { completed: false, confirmedIds };
   } finally {
     syncStore.setSyncing(false);
   }

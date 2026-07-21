@@ -14,6 +14,8 @@ interface CrosswordGameProps {
 
 export function CrosswordGame({ words, onFinish }: CrosswordGameProps) {
   const phaserRef = useRef<IRefPhaserGame | null>(null);
+  const [state, setState] = useState<CrosswordState | null>(null);
+
   const engine = useMemo(() => new CrosswordEngine(words), [words]);
   const [state, setState] = useState<CrosswordState>(() => engine.getState());
 
@@ -31,6 +33,7 @@ export function CrosswordGame({ words, onFinish }: CrosswordGameProps) {
     setup();
 
     // Set initial state from engine
+    setState({ ...engine.getState() });
 
     const unsubscribe = engine.subscribe((newState) => {
       setState({ ...newState });

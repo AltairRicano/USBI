@@ -86,7 +86,7 @@ export const SnakeLadderGame: React.FC<SnakeLadderGameProps> = ({ level, onCompl
       <div className="flex flex-col items-center justify-center p-4">
          {!isGameOver ? (
              <>
-                 <div className="mb-4 rounded-xl shadow-lg overflow-hidden border-2 border-slate-300 relative w-[600px] h-[600px] bg-white">
+                 <div className="mb-4 rounded-xl shadow-lg overflow-hidden border-2 border-slate-300 relative w-[600px] h-[600px] bg-[--color-card]">
                      <PhaserGame ref={phaserRef} config={gameConfig} />
                  </div>
                  <button 

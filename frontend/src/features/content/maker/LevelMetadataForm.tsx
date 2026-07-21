@@ -26,7 +26,7 @@ export function LevelMetadataForm({
         <label className="flex flex-col gap-1 text-sm font-medium">
           Sección
           <select
-            className="min-h-[44px] rounded-lg border border-[--color-border] bg-white px-3"
+            className="min-h-[44px] rounded-lg border border-[--color-border] bg-[--color-card] px-3"
             value={sectionId}
             onChange={(e) => {
               const newId = e.currentTarget.value;
@@ -49,7 +49,7 @@ export function LevelMetadataForm({
         <label className="flex flex-col gap-1 text-sm font-medium">
           Plantilla
           <select
-            className="min-h-[44px] rounded-lg border border-[--color-border] bg-white px-3"
+            className="min-h-[44px] rounded-lg border border-[--color-border] bg-[--color-card] px-3"
             value={templateType}
             onChange={(e: any) => setTemplateType(e.currentTarget.value)}
             required

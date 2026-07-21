@@ -73,7 +73,7 @@ export function OfficialLevelPage() {
   if (levelQuery.isError) {
     return (
       <main className="min-h-screen p-6" style={{ backgroundColor: 'var(--color-surface)' }}>
-        <div className="mx-auto max-w-3xl rounded-lg bg-white p-5">
+        <div className="mx-auto max-w-3xl rounded-lg bg-[--color-card] p-5">
           <p className="text-[--color-error]">No se pudo cargar el nivel.</p>
           <Button variant="outline" size="sm" className="mt-4">
             <Link to="/dashboard">Volver</Link>
@@ -109,7 +109,7 @@ export function OfficialLevelPage() {
         </header>
 
         {result && (
-          <section className="rounded-lg bg-white p-5 shadow-sm">
+          <section className="rounded-lg bg-[--color-card] p-5 shadow-sm">
             <h2 className="text-xl font-semibold">Resultado oficial</h2>
             <p className="text-sm text-[--color-muted]">
               XP otorgada: {result.xp_awarded} · intento {result.attempt_number} · XP total: {result.total_xp} · racha: {result.current_streak}
@@ -130,11 +130,11 @@ export function OfficialLevelPage() {
         )}
 
         {!level.is_published && (
-          <section className="rounded-lg bg-white p-4 text-sm text-[--color-muted] shadow-sm">
+          <section className="rounded-lg bg-[--color-card] p-4 text-sm text-[--color-muted] shadow-sm">
             Vista previa de borrador. Este intento no modifica XP ni progreso oficial.
           </section>
         )}
-        {saveError && <p className="rounded border border-[--color-error] bg-white p-3 text-[--color-error]">{saveError}</p>}
+        {saveError && <p className="rounded border border-[--color-error] bg-[--color-card] p-3 text-[--color-error]">{saveError}</p>}
 
         <Suspense fallback={<GameFallback />}>
           {level.template_type === 'trivia' && triviaQuestions.length > 0 && (
@@ -166,7 +166,7 @@ export function OfficialLevelPage() {
           )}
         </Suspense>
         {!hasPlayableContent(level) && (
-          <section className="rounded-lg bg-white p-5 shadow-sm">
+          <section className="rounded-lg bg-[--color-card] p-5 shadow-sm">
             <p className="text-[--color-muted]">El contenido de este nivel no cumple el contrato mínimo de su plantilla.</p>
           </section>
         )}
@@ -177,7 +177,7 @@ export function OfficialLevelPage() {
 
 function GameFallback() {
   return (
-    <section className="rounded-lg bg-white p-5 shadow-sm">
+    <section className="rounded-lg bg-[--color-card] p-5 shadow-sm">
       <p className="text-[--color-muted]">Cargando juego...</p>
     </section>
   );

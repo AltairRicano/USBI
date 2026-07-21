@@ -28,10 +28,30 @@ export class CrosswordScene extends Phaser.Scene {
   }
 
   create() {
+    // Draw a white background to prevent black canvas bleed-through
+    this.add.rectangle(
+      this.cameras.main.width / 2,
+      this.cameras.main.height / 2,
+      this.cameras.main.width,
+      this.cameras.main.height,
+      0xf8f9fa
+    );
+
     this.highlightGraphics = this.add.graphics();
     const cells = this.engine.getGridCells();
-    
-    // Find bounds
+
+    // Guard: nothing to draw if engine has no placed words
+    if (cells.length === 0) {
+      this.add.text(
+        this.cameras.main.width / 2,
+        this.cameras.main.height / 2,
+        'Sin palabras para mostrar',
+        { fontSize: '20px', color: '#666666', fontFamily: 'sans-serif' }
+      ).setOrigin(0.5);
+      return;
+    }
+
+    // Find grid bounds
     let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
     cells.forEach(c => {
       if (c.x < minX) minX = c.x;
@@ -39,34 +59,54 @@ export class CrosswordScene extends Phaser.Scene {
       if (c.y < minY) minY = c.y;
       if (c.y > maxY) maxY = c.y;
     });
-    
-    const width = (maxX - minX + 1) * this.cellSize;
-    const height = (maxY - minY + 1) * this.cellSize;
-    
-    this.gridOffset.x = (this.cameras.main.width - width) / 2 - (minX * this.cellSize);
-    this.gridOffset.y = (this.cameras.main.height - height) / 2 - (minY * this.cellSize);
+
+    const gridW = (maxX - minX + 1) * this.cellSize;
+    const gridH = (maxY - minY + 1) * this.cellSize;
+
+    this.gridOffset.x = (this.cameras.main.width - gridW) / 2 - (minX * this.cellSize);
+    this.gridOffset.y = (this.cameras.main.height - gridH) / 2 - (minY * this.cellSize);
+
+    // Build a set of word-start positions for numbering
+    const wordStartLabels = new Map<string, number>();
+    this.engine.getPlacedWords().forEach((pw, idx) => {
+      wordStartLabels.set(`${pw.x},${pw.y}`, idx + 1);
+    });
 
     cells.forEach(c => {
       const px = this.gridOffset.x + c.x * this.cellSize;
       const py = this.gridOffset.y + c.y * this.cellSize;
-      
-      const rect = this.add.rectangle(px + this.cellSize/2, py + this.cellSize/2, this.cellSize, this.cellSize, 0xffffff)
-        .setStrokeStyle(1, 0x000000)
+
+      const rect = this.add
+        .rectangle(px + this.cellSize / 2, py + this.cellSize / 2, this.cellSize, this.cellSize, 0xffffff)
+        .setStrokeStyle(1, 0x333333)
         .setInteractive({ cursor: 'pointer' });
-        
+
       rect.on('pointerdown', () => {
         this.engine.selectCell(c.x, c.y);
       });
-      
-      const text = this.add.text(px + this.cellSize/2, py + this.cellSize/2, '', {
-        fontSize: '24px',
-        color: '#000000',
-        fontFamily: 'monospace'
-      }).setOrigin(0.5);
-      
+
+      const text = this.add
+        .text(px + this.cellSize / 2, py + this.cellSize / 2, '', {
+          fontSize: '22px',
+          color: '#111111',
+          fontFamily: 'monospace',
+          fontStyle: 'bold',
+        })
+        .setOrigin(0.5);
+
       const key = `${c.x},${c.y}`;
       this.cellRects.set(key, rect);
       this.cellTexts.set(key, text);
+
+      // Draw small number label at top-left of word-start cells
+      const labelNum = wordStartLabels.get(key);
+      if (labelNum !== undefined) {
+        this.add.text(px + 2, py + 1, String(labelNum), {
+          fontSize: '10px',
+          color: '#555555',
+          fontFamily: 'sans-serif',
+        });
+      }
     });
 
     this.input.keyboard!.on('keydown', this.handleKeyDown, this);

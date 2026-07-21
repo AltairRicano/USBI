@@ -119,7 +119,7 @@ export default function LoginPage() {
 
       <div
         className="w-full max-w-md rounded-2xl shadow-xl p-8 space-y-6"
-        style={{ backgroundColor: 'var(--color-background)' }}
+        style={{ backgroundColor: 'var(--color-card)' }}
       >
         {/* Encabezado institucional */}
         <header className="text-center space-y-1">
@@ -174,7 +174,7 @@ export default function LoginPage() {
           />
 
           {notice && (
-            <p className="rounded border border-[--color-border] bg-white p-3 text-sm text-[--color-primary]">
+            <p className="rounded border border-[--color-border] bg-[--color-card] p-3 text-sm text-[--color-primary]">
               {notice}
             </p>
           )}

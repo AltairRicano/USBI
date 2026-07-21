@@ -177,7 +177,7 @@ export const MakerPage = () => {
               name="metadata.template_type"
               control={control}
               render={({ field }) => (
-                <select id="maker-template" {...field} className="w-full p-2 border rounded bg-white">
+                <select id="maker-template" {...field} className="w-full p-2 border rounded bg-[--color-card]">
                   <option value="trivia">Trivia</option>
                 </select>
               )}

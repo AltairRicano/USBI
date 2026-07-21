@@ -18,6 +18,7 @@ export function PuzzleGame({ imageUrl, gridSize = 3, seed = 1234, onFinish }: Pu
   const [state, setState] = useState<PuzzleState | null>(null);
 
   const engine = useMemo(() => new PuzzleEngine(gridSize, seed), [gridSize, seed]);
+  const [state, setState] = useState<PuzzleState>(() => engine.getState());
 
   useEffect(() => {
     const setup = async () => {
@@ -71,7 +72,6 @@ export function PuzzleGame({ imageUrl, gridSize = 3, seed = 1234, onFinish }: Pu
     game.scene.start('PuzzleScene', { engine, onFinish, imageUrl });
   }, [engine, onFinish, imageUrl]);
 
-  if (!state) return <div>Loading...</div>;
 
   return (
     <Card className="w-full max-w-2xl mx-auto mt-8 flex flex-col items-center p-6 gap-6">

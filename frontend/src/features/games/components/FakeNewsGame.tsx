@@ -55,7 +55,7 @@ export const FakeNewsGame: React.FC<FakeNewsGameProps> = ({ news, onComplete }) 
               handleSwipe(true); // Swiped right -> FALSO
             }
           }}
-          className="bg-white p-6 rounded-2xl shadow-xl w-full text-center border-2 border-slate-200 cursor-grab active:cursor-grabbing"
+          className="bg-[--color-card] p-6 rounded-2xl shadow-xl w-full text-center border-2 border-slate-200 cursor-grab active:cursor-grabbing"
         >
           {currentItem.imageUrl && (
             <img src={currentItem.imageUrl} alt={currentItem.title} className="w-full h-48 object-cover rounded-lg mb-4" />

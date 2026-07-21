@@ -19,6 +19,7 @@ export function WordSearchGame({ words, width = 10, height = 10, seed = 1234, on
   const [state, setState] = useState<WordSearchState | null>(null);
 
   const engine = useMemo(() => new WordSearchEngine(words, width, height, seed), [words, width, height, seed]);
+  const [state, setState] = useState<WordSearchState>(() => engine.getState());
 
   useEffect(() => {
     const setup = async () => {
@@ -72,7 +73,6 @@ export function WordSearchGame({ words, width = 10, height = 10, seed = 1234, on
     game.scene.start('WordSearchScene', { engine, onFinish });
   }, [engine, onFinish]);
 
-  if (!state) return <div>Loading...</div>;
 
   return (
     <Card className="w-full max-w-4xl mx-auto mt-8 flex flex-col md:flex-row gap-4">

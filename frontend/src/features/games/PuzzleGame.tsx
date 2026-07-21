@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useMemo } from 'react';
+import { useEffect, useRef, useState, useMemo, useCallback } from 'react';
 import Phaser from 'phaser';
 import { invoke } from '@tauri-apps/api/core';
 import { PuzzleEngine, PuzzleState } from '@usbi/engine';
@@ -15,7 +15,6 @@ interface PuzzleGameProps {
 
 export function PuzzleGame({ imageUrl, gridSize = 3, seed = 1234, onFinish }: PuzzleGameProps) {
   const phaserRef = useRef<IRefPhaserGame | null>(null);
-  const engineRef = useRef<PuzzleEngine | null>(null);
   const [state, setState] = useState<PuzzleState | null>(null);
 
   const engine = useMemo(() => new PuzzleEngine(gridSize, seed), [gridSize, seed]);
@@ -32,7 +31,8 @@ export function PuzzleGame({ imageUrl, gridSize = 3, seed = 1234, onFinish }: Pu
     };
     setup();
 
-    engineRef.current = engine;
+    // Set initial state from engine
+    setState({ ...engine.getState() });
 
     const unsubscribe = engine.subscribe((newState) => {
       setState({ ...newState });
@@ -59,17 +59,17 @@ export function PuzzleGame({ imageUrl, gridSize = 3, seed = 1234, onFinish }: Pu
     width: 600,
     height: 600,
     backgroundColor: '#ffffff',
-    scene: [PuzzleScene]
+    scene: [PuzzleScene],
+    scale: {
+      mode: Phaser.Scale.FIT,
+      autoCenter: Phaser.Scale.CENTER_BOTH,
+    },
   }), []);
 
-  useEffect(() => {
-    if (phaserRef.current?.game) {
-       const game = phaserRef.current.game;
-       game.events.once('ready', () => {
-          game.scene.start('PuzzleScene', { engine, onFinish, imageUrl });
-       });
-    }
-  }, [phaserRef, engine, onFinish, imageUrl]);
+  // This callback is guaranteed to fire after Phaser is ready
+  const handleGameReady = useCallback((game: Phaser.Game) => {
+    game.scene.start('PuzzleScene', { engine, onFinish, imageUrl });
+  }, [engine, onFinish, imageUrl]);
 
   if (!state) return <div>Loading...</div>;
 
@@ -78,12 +78,12 @@ export function PuzzleGame({ imageUrl, gridSize = 3, seed = 1234, onFinish }: Pu
       <CardTitle className="text-2xl">Rompecabezas</CardTitle>
 
       <div className="flex gap-4 items-center">
-        <p className="font-bold text-lg text-gray-700">Movimientos: {state.moves}</p>
+        <p className="font-bold text-lg text-gray-700 dark:text-gray-300">Movimientos: {state.moves}</p>
         <p className="font-bold text-lg text-[--color-primary]">Puntuación: {state.score}</p>
       </div>
 
       <div className="w-[600px] h-[600px] border-4 border-[--color-border] rounded-xl overflow-hidden shadow-lg relative">
-         <PhaserGame ref={phaserRef} config={gameConfig} />
+         <PhaserGame ref={phaserRef} config={gameConfig} onGameReady={handleGameReady} />
       </div>
 
       {state.isFinished && (

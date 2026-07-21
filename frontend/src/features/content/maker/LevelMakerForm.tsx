@@ -131,7 +131,7 @@ function LevelMakerFormInner({ initialData, sections, onSave, onCancel }: LevelM
   const PreviewComponent = registryEntry.PreviewComponent as any;
 
   return (
-    <div className="bg-card text-text-card p-6 rounded-lg shadow-sm">
+    <div className="bg-[--color-card] text-[--color-text-card] p-6 rounded-lg shadow-sm">
       <h2 className="text-2xl font-bold mb-6">{isEditing ? 'Editar Nivel' : 'Crear Nuevo Nivel'}</h2>
       
       <LevelMetadataForm 

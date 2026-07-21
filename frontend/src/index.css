@@ -20,11 +20,11 @@
 }
 
 html.dark {
-  --theme-bg: #0f172a;
+  --theme-bg: #020617;
   --theme-fg: #f8fafc;
-  --theme-surface: #1e293b;
+  --theme-surface: #0f172a;
   --theme-muted: #94a3b8;
-  --theme-border: #334155;
+  --theme-border: #475569;
   --theme-card: #1e293b;
   --theme-text-card: #f8fafc;
 }

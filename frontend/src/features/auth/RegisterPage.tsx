@@ -107,7 +107,7 @@ export default function RegisterPage() {
     >
       <div
         className="w-full max-w-md rounded-2xl shadow-xl p-8 space-y-6"
-        style={{ backgroundColor: 'var(--color-background)' }}
+        style={{ backgroundColor: 'var(--color-card)' }}
       >
         <header className="text-center space-y-1">
           <h1 className="text-2xl font-bold" style={{ color: 'var(--color-primary)' }}>

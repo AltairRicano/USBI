@@ -17,7 +17,8 @@ export function CrosswordGame({ words, onFinish }: CrosswordGameProps) {
   const [state, setState] = useState<CrosswordState | null>(null);
 
   const engine = useMemo(() => new CrosswordEngine(words), [words]);
-  const placedWords = useMemo(() => engine.getPlacedWords(), [engine]);
+  const [state, setState] = useState<CrosswordState>(() => engine.getState());
+
 
   useEffect(() => {
     const setup = async () => {
@@ -71,7 +72,6 @@ export function CrosswordGame({ words, onFinish }: CrosswordGameProps) {
     game.scene.start('CrosswordScene', { engine, onFinish });
   }, [engine, onFinish]);
 
-  if (!state) return <div>Loading...</div>;
 
   return (
     <Card className="w-full max-w-5xl mx-auto mt-8 flex flex-col md:flex-row gap-4">

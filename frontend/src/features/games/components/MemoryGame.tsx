@@ -75,7 +75,7 @@ export const MemoryGame: React.FC<MemoryGameProps> = ({ pairs, onComplete }) => 
               {/* Front of the card (visible when flipped) */}
               <div
                 className={clsx(
-                  "absolute w-full h-full bg-white rounded-xl backface-hidden flex items-center justify-center p-2 text-center break-words",
+                  "absolute w-full h-full bg-[--color-card] rounded-xl backface-hidden flex items-center justify-center p-2 text-center break-words",
                   card.isMatched ? "bg-green-100 border-green-400" : "border-slate-300"
                 )}
                 style={{ backfaceVisibility: 'hidden', transform: 'rotateY(180deg)' }}

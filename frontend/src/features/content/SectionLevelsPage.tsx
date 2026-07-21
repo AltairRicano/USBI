@@ -37,11 +37,11 @@ export function SectionLevelsPage() {
           </Button>
         </header>
 
-        {error && <p className="rounded border border-[--color-error] bg-white p-3 text-[--color-error]">{error}</p>}
+        {error && <p className="rounded border border-[--color-error] bg-[--color-card] p-3 text-[--color-error]">{error}</p>}
 
         <section className="grid gap-4 md:grid-cols-2">
           {levels.map((level) => (
-            <article key={level.id} className="rounded-lg bg-white p-5 shadow-sm">
+            <article key={level.id} className="rounded-lg bg-[--color-card] p-5 shadow-sm">
               <div className="mb-4 h-2 rounded" style={{ backgroundColor: level.color }} />
               <h2 className="text-xl font-semibold">{level.title}</h2>
               <p className="mb-4 text-sm text-[--color-muted]">Dificultad {level.difficulty} · {level.template_type}</p>
@@ -50,7 +50,7 @@ export function SectionLevelsPage() {
               </Button>
             </article>
           ))}
-          {levels.length === 0 && <p className="rounded-lg bg-white p-5 text-[--color-muted]">No hay niveles publicados en esta sección.</p>}
+          {levels.length === 0 && <p className="rounded-lg bg-[--color-card] p-5 text-[--color-muted]">No hay niveles publicados en esta sección.</p>}
         </section>
       </div>
     </main>

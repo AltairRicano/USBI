@@ -8,14 +8,15 @@ export interface IRefPhaserGame {
 
 export interface PhaserGameProps {
     config: Phaser.Types.Core.GameConfig;
+    onGameReady?: (game: Phaser.Game) => void;
 }
 
-export const PhaserGame = forwardRef<IRefPhaserGame, PhaserGameProps>(({ config }, ref) => {
+export const PhaserGame = forwardRef<IRefPhaserGame, PhaserGameProps>(({ config, onGameReady }, ref) => {
     const gameContainer = useRef<HTMLDivElement>(null);
 
     useLayoutEffect(() => {
         if (!gameContainer.current) return;
-        
+
         // Prevent multiple game instances during React StrictMode development
         if (gameContainer.current.children.length > 0) return;
 
@@ -27,7 +28,14 @@ export const PhaserGame = forwardRef<IRefPhaserGame, PhaserGameProps>(({ config 
             ref.current = { game, scene: null };
         }
 
-        // Setup a global event listener to keep the active scene reference updated (optional but useful)
+        // Call onGameReady when Phaser finishes booting
+        game.events.once('ready', () => {
+            if (onGameReady) {
+                onGameReady(game);
+            }
+        });
+
+        // Setup a global event listener to keep the active scene reference updated
         game.events.on('step', () => {
             const activeScene = game.scene.getScenes(true)[0];
             if (activeScene) {
@@ -49,7 +57,8 @@ export const PhaserGame = forwardRef<IRefPhaserGame, PhaserGameProps>(({ config 
                 ref.current = { game: null, scene: null };
             }
         };
-    }, [config, ref]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
 
-    return <div ref={gameContainer} className="phaser-game-container" />;
+    return <div ref={gameContainer} className="phaser-game-container" style={{ width: '100%', height: '100%' }} />;
 });

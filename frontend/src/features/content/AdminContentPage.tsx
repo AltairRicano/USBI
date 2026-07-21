@@ -144,7 +144,7 @@ export function AdminContentPage() {
           </div>
         </header>
 
-        {error && <p className="rounded border border-[--color-error] bg-white p-3 text-[--color-error]">{error}</p>}
+        {error && <p className="rounded border border-[--color-error] bg-[--color-card] p-3 text-[--color-error]">{error}</p>}
 
         {showMaker ? (
           <LevelMakerForm 
@@ -158,7 +158,7 @@ export function AdminContentPage() {
           />
         ) : (
           <div className="grid gap-6 lg:grid-cols-2">
-            <section className="rounded-lg bg-white p-5 shadow-sm">
+            <section className="rounded-lg bg-[--color-card] p-5 shadow-sm">
               <h2 className="mb-4 text-xl font-semibold">Nueva sección</h2>
               <form onSubmit={createSection} className="space-y-4">
                 <Input label="Título de sección" value={sectionTitle} onChange={(e) => setSectionTitle(e.currentTarget.value)} required />
@@ -168,7 +168,7 @@ export function AdminContentPage() {
               </form>
             </section>
 
-            <section className="rounded-lg bg-white p-5 shadow-sm flex flex-col justify-center items-center">
+            <section className="rounded-lg bg-[--color-card] p-5 shadow-sm flex flex-col justify-center items-center">
               <h2 className="mb-4 text-xl font-semibold">Nuevo Nivel Oficial</h2>
               <p className="text-sm text-gray-500 mb-4 text-center">Usa el editor visual para configurar niveles con validación completa.</p>
               <Button onClick={() => setShowMaker(true)} className="bg-[#18529D] text-white">Abrir Creador de Niveles</Button>
@@ -178,7 +178,7 @@ export function AdminContentPage() {
 
         {!showMaker && (
           <>
-            <section className="rounded-lg bg-white p-5 shadow-sm">
+            <section className="rounded-lg bg-[--color-card] p-5 shadow-sm">
               <h2 className="mb-4 text-xl font-semibold">Secciones</h2>
               {editingSection && (
                 <form onSubmit={saveSectionEdit} className="mb-5 rounded-lg border border-[--color-border] p-4">
@@ -239,7 +239,7 @@ export function AdminContentPage() {
               </div>
             </section>
 
-            <section className="rounded-lg bg-white p-5 shadow-sm">
+            <section className="rounded-lg bg-[--color-card] p-5 shadow-sm">
               <h2 className="mb-4 text-xl font-semibold">Niveles</h2>
               <div className="divide-y">
                 {levels.map((level) => (

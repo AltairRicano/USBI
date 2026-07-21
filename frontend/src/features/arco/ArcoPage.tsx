@@ -67,21 +67,21 @@ export function ArcoRequestPage() {
           </Button>
         </header>
 
-        {error && <p className="rounded border border-[--color-error] bg-white p-3 text-[--color-error]">{error}</p>}
+        {error && <p className="rounded border border-[--color-error] bg-[--color-card] p-3 text-[--color-error]">{error}</p>}
         {requestID && (
-          <section className="rounded-lg bg-white p-5 shadow-sm">
+          <section className="rounded-lg bg-[--color-card] p-5 shadow-sm">
             <h2 className="text-xl font-semibold">Solicitud registrada</h2>
             <p className="mt-2 text-sm text-[--color-muted]">Folio: {requestID}</p>
             <p className="text-sm text-[--color-muted]">Estado: {status ?? 'pending'}</p>
           </section>
         )}
 
-        <section className="rounded-lg bg-white p-5 shadow-sm">
+        <section className="rounded-lg bg-[--color-card] p-5 shadow-sm">
           <form onSubmit={submitRequest} className="space-y-4">
             <label className="flex flex-col gap-1 text-sm font-medium">
               Tipo de solicitud
               <select
-                className="min-h-[44px] rounded-lg border border-[--color-border] bg-white px-3"
+                className="min-h-[44px] rounded-lg border border-[--color-border] bg-[--color-card] px-3"
                 value={requestType}
                 onChange={(e) => setRequestType(e.currentTarget.value as ArcoRequestType)}
                 required
@@ -96,7 +96,7 @@ export function ArcoRequestPage() {
               Detalles
               <textarea
                 id="arco-details"
-                className="min-h-[160px] rounded-lg border border-[--color-border] bg-white p-3 text-sm"
+                className="min-h-[160px] rounded-lg border border-[--color-border] bg-[--color-card] p-3 text-sm"
                 maxLength={1000}
                 value={details}
                 onChange={(e) => setDetails(e.currentTarget.value)}
@@ -163,10 +163,10 @@ export function ArcoAdminPage() {
           </Button>
         </header>
 
-        {error && <p className="rounded border border-[--color-error] bg-white p-3 text-[--color-error]">{error}</p>}
-        {message && <p className="rounded border border-[--color-border] bg-white p-3 text-[--color-primary]">{message}</p>}
+        {error && <p className="rounded border border-[--color-error] bg-[--color-card] p-3 text-[--color-error]">{error}</p>}
+        {message && <p className="rounded border border-[--color-border] bg-[--color-card] p-3 text-[--color-primary]">{message}</p>}
 
-        <section className="rounded-lg bg-white p-5 shadow-sm">
+        <section className="rounded-lg bg-[--color-card] p-5 shadow-sm">
           <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
             <h2 className="text-xl font-semibold">Pendientes</h2>
             <Button variant="outline" size="sm" onClick={() => void pendingQuery.refetch()}>
@@ -198,7 +198,7 @@ export function ArcoAdminPage() {
           </div>
         </section>
 
-        <section className="rounded-lg bg-white p-5 shadow-sm">
+        <section className="rounded-lg bg-[--color-card] p-5 shadow-sm">
           <form onSubmit={resolveRequest} className="space-y-4">
             <Input
               label="Folio"
@@ -218,7 +218,7 @@ export function ArcoAdminPage() {
               Resumen de respuesta
               <textarea
                 id="arco-response-summary"
-                className="min-h-[160px] rounded-lg border border-[--color-border] bg-white p-3 text-sm"
+                className="min-h-[160px] rounded-lg border border-[--color-border] bg-[--color-card] p-3 text-sm"
                 value={responseSummary}
                 onChange={(e) => setResponseSummary(e.currentTarget.value)}
                 required

@@ -59,12 +59,12 @@ export function ProfilePage() {
           </Button>
         </header>
 
-        {error && <p className="rounded border border-[--color-error] bg-white p-3 text-[--color-error]">{error}</p>}
-        {ageUpError && <p className="rounded border border-[--color-error] bg-white p-3 text-[--color-error]">{ageUpError}</p>}
-        {ageUpMessage && <p className="rounded border border-[--color-border] bg-white p-3 text-[--color-primary]">{ageUpMessage}</p>}
+        {error && <p className="rounded border border-[--color-error] bg-[--color-card] p-3 text-[--color-error]">{error}</p>}
+        {ageUpError && <p className="rounded border border-[--color-error] bg-[--color-card] p-3 text-[--color-error]">{ageUpError}</p>}
+        {ageUpMessage && <p className="rounded border border-[--color-border] bg-[--color-card] p-3 text-[--color-primary]">{ageUpMessage}</p>}
 
         {user && !user.is_adult && (
-          <section className="rounded-lg bg-white p-5 shadow-sm">
+          <section className="rounded-lg bg-[--color-card] p-5 shadow-sm">
             <h2 className="text-xl font-semibold">Confirmación de mayoría de edad</h2>
             <p className="mt-2 text-sm text-[--color-muted]">
               Al confirmar, el backend actualiza tu estatus y minimiza los datos del tutor asociados a la cuenta.
@@ -84,7 +84,7 @@ export function ProfilePage() {
               <Metric label="Racha" value={progress.current_streak} />
             </section>
 
-            <section className="rounded-lg bg-white p-5 shadow-sm">
+            <section className="rounded-lg bg-[--color-card] p-5 shadow-sm">
               <h2 className="mb-4 text-xl font-semibold">Insignias</h2>
               <div className="mb-6 flex flex-wrap gap-2">
                 {(progress.badges ?? []).map((badge) => (
@@ -133,7 +133,7 @@ function errorMessage(err: unknown, fallback: string): string {
 
 function Metric({ label, value }: { label: string; value: number }) {
   return (
-    <div className="rounded-lg bg-white p-5 shadow-sm">
+    <div className="rounded-lg bg-[--color-card] p-5 shadow-sm">
       <p className="text-sm text-[--color-muted]">{label}</p>
       <p className="text-3xl font-bold text-[--color-primary]">{value}</p>
     </div>

@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 export default function PrivacyPage() {
   return (
     <main className="min-h-screen p-6 md:p-12" style={{ backgroundColor: 'var(--color-surface)' }}>
-      <div className="max-w-4xl mx-auto space-y-8 bg-white p-8 rounded-2xl shadow-xl" style={{ backgroundColor: 'var(--color-background)', color: 'var(--color-foreground)' }}>
+      <div className="max-w-4xl mx-auto space-y-8 bg-[--color-card] p-8 rounded-2xl shadow-xl" style={{ backgroundColor: 'var(--color-card)', color: 'var(--color-foreground)' }}>
         <header className="border-b pb-4 mb-6" style={{ borderColor: 'var(--color-border)' }}>
           <h1 className="text-3xl font-bold" style={{ color: 'var(--color-primary)' }}>AVISO DE PRIVACIDAD INTEGRAL</h1>
           <p className="text-sm mt-2" style={{ color: 'var(--color-muted)' }}>Plataforma Educativa y Motor de Minijuegos - USBI<br/>Última actualización: 08 de julio de 2026.</p>

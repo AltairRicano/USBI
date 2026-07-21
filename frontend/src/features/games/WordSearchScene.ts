@@ -26,11 +26,20 @@ export class WordSearchScene extends Phaser.Scene {
   }
 
   init(data: SceneData) {
-    this.engine = data.engine;
-    this.onFinish = data.onFinish;
+    if (data.engine) {
+       this.engine = data.engine;
+    }
+    if (data.onFinish) {
+       this.onFinish = data.onFinish;
+    }
   }
 
-  create() {
+  create(data: SceneData) {
+    if (data.engine) this.engine = data.engine;
+    if (data.onFinish) this.onFinish = data.onFinish;
+
+    if (!this.engine) return;
+
     const state = this.engine.getState();
     const width = state.width;
     const height = state.height;
@@ -72,9 +81,13 @@ export class WordSearchScene extends Phaser.Scene {
         this.onFinish(newState.score);
       }
     });
+
+    // Draw initially found words if any
+    this.redrawFound(state.foundWords, state.grid, state.width, state.height);
   }
 
   private getGridCoord(x: number, y: number): { x: number, y: number } | null {
+    if (!this.engine) return null;
     const state = this.engine.getState();
     const gx = Math.floor((x - this.gridOffset.x) / this.cellSize);
     const gy = Math.floor((y - this.gridOffset.y) / this.cellSize);
@@ -122,7 +135,9 @@ export class WordSearchScene extends Phaser.Scene {
   private handlePointerUp() {
     if (this.isSelecting) {
       this.isSelecting = false;
-      this.engine.checkWord(this.selectedCoords);
+      if (this.engine) {
+         this.engine.checkWord(this.selectedCoords);
+      }
       this.selectedCoords = [];
       this.selectionGraphics.clear();
     }
@@ -152,6 +167,7 @@ export class WordSearchScene extends Phaser.Scene {
   }
 
   private redrawFound(foundWords: string[], grid: string[][], width: number, height: number) {
+    if (!this.foundGraphics) return;
     this.foundGraphics.clear();
     
     for (const word of foundWords) {

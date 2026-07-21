@@ -51,7 +51,7 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(
           />
 
           {rightIcon && (
-            <span className="absolute right-3 text-[--color-muted]" aria-hidden="true">
+            <span className="absolute right-3 text-[--color-muted]">
               {rightIcon}
             </span>
           )}

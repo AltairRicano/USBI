@@ -76,6 +76,7 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 			writeProblem(w, r, http.StatusForbidden, "pending-tutor-consent",
 				"Tutor Consent Required", "Tutor consent is required before login")
 		default:
+			println("[ERROR] Login failed: " + err.Error())
 			writeProblem(w, r, http.StatusInternalServerError, "internal-error",
 				"Internal Server Error", "An unexpected error occurred")
 		}

@@ -7,7 +7,6 @@ package repository
 import (
 	"database/sql"
 	"encoding/json"
-	"net"
 	"time"
 
 	"github.com/google/uuid"
@@ -22,7 +21,7 @@ type AdminAuditLog struct {
 	EntityID    uuid.NullUUID         `json:"entity_id"`
 	BeforeState pqtype.NullRawMessage `json:"before_state"`
 	AfterState  pqtype.NullRawMessage `json:"after_state"`
-	IpAddress   net.IP                `json:"ip_address"`
+	IpAddress   string                `json:"ip_address"`
 	UserAgent   string                `json:"user_agent"`
 	CreatedAt   time.Time             `json:"created_at"`
 }
@@ -115,6 +114,7 @@ type PlayerProgress struct {
 type Section struct {
 	ID               uuid.UUID     `json:"id"`
 	Title            string        `json:"title"`
+	Description      string        `json:"description"`
 	Color            string        `json:"color"`
 	CreatedByAdminID uuid.NullUUID `json:"created_by_admin_id"`
 	IsPublished      bool          `json:"is_published"`
@@ -160,7 +160,7 @@ type TutorConsent struct {
 	TutorEmail           []byte       `json:"tutor_email"`
 	PrivacyNoticeVersion string       `json:"privacy_notice_version"`
 	AcceptedAt           time.Time    `json:"accepted_at"`
-	AcceptanceIp         net.IP       `json:"acceptance_ip"`
+	AcceptanceIp         string       `json:"acceptance_ip"`
 	AcceptanceUserAgent  string       `json:"acceptance_user_agent"`
 	ConsentSignature     []byte       `json:"consent_signature"`
 	CryptoKeyVersion     int16        `json:"crypto_key_version"`

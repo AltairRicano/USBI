@@ -1,6 +1,6 @@
 version: "2"
 sql:
-  - schema: "migrations/0001_initial.up.sql"
+  - schema: "migrations"
     queries: "sql/query.sql"
     engine: "postgresql"
     gen:
@@ -16,4 +16,4 @@ sql:
           - db_type: "uuid"
             go_type: "github.com/google/uuid.UUID"
           - db_type: "inet"
-            go_type: "net.IP"
+            go_type: "string"

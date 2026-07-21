@@ -111,6 +111,7 @@ func SetupRoutes(r chi.Router, deps RouterDependencies) {
 				r.Post("/sections", deps.LevelsHandler.CreateSection)
 				r.Patch("/sections/{section_id}", deps.LevelsHandler.UpdateSection)
 				r.Post("/sections/{section_id}/publish", deps.LevelsHandler.PublishSection)
+				r.Post("/sections/{section_id}/unpublish", deps.LevelsHandler.UnpublishSection)
 				r.Post("/sections/{section_id}/archive", deps.LevelsHandler.ArchiveSection)
 
 				r.Post("/levels", deps.LevelsHandler.CreateLevel)
@@ -118,6 +119,7 @@ func SetupRoutes(r chi.Router, deps RouterDependencies) {
 				r.Get("/levels/{level_id}", deps.LevelsHandler.GetLevel)
 				r.Patch("/levels/{level_id}", deps.LevelsHandler.UpdateLevel)
 				r.Post("/levels/{level_id}/publish", deps.LevelsHandler.PublishLevel)
+				r.Post("/levels/{level_id}/unpublish", deps.LevelsHandler.UnpublishLevel)
 				r.Post("/levels/{level_id}/archive", deps.LevelsHandler.ArchiveLevel)
 				r.Post("/levels/{level_id}/complete", deps.LevelsHandler.CompleteLevel)
 
@@ -176,10 +178,14 @@ func notImplementedHandler(operation string) http.HandlerFunc {
 
 // corsMiddleware applies CORS headers. The origin is configurable to support
 // both production (https://usbi.edu.mx) and local LAN development.
-func corsMiddleware(allowedOrigin string) func(http.Handler) http.Handler {
+func corsMiddleware(defaultOrigin string) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			w.Header().Set("Access-Control-Allow-Origin", allowedOrigin)
+			origin := r.Header.Get("Origin")
+			if origin == "" {
+				origin = defaultOrigin
+			}
+			w.Header().Set("Access-Control-Allow-Origin", origin)
 			w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PATCH, OPTIONS")
 			w.Header().Set("Access-Control-Allow-Headers", "Authorization, Content-Type, X-Request-ID")
 			w.Header().Set("Access-Control-Max-Age", "86400")

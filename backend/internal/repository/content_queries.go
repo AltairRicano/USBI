@@ -28,6 +28,7 @@ func (q *Queries) BeginTx(ctx context.Context, opts *sql.TxOptions) (*sql.Tx, er
 type CreateSectionReturningParams struct {
 	ID               uuid.UUID
 	Title            string
+	Description      string
 	Color            string
 	IsPublished      bool
 	CreatedByAdminID uuid.NullUUID
@@ -35,10 +36,10 @@ type CreateSectionReturningParams struct {
 
 func (q *Queries) CreateSectionReturning(ctx context.Context, arg CreateSectionReturningParams) (Section, error) {
 	row := q.db.QueryRowContext(ctx, `
-INSERT INTO sections (id, title, color, is_published, created_by_admin_id)
-VALUES ($1, $2, $3, $4, $5)
-RETURNING id, title, color, created_by_admin_id, is_published, created_at, deleted_at, archived_at
-`, arg.ID, arg.Title, arg.Color, arg.IsPublished, arg.CreatedByAdminID)
+INSERT INTO sections (id, title, description, color, is_published, created_by_admin_id)
+VALUES ($1, $2, $3, $4, $5, $6)
+RETURNING id, title, description, color, created_by_admin_id, is_published, created_at, deleted_at, archived_at
+`, arg.ID, arg.Title, arg.Description, arg.Color, arg.IsPublished, arg.CreatedByAdminID)
 	return scanSection(row)
 }
 
@@ -48,7 +49,7 @@ type ListSectionsParams struct {
 
 func (q *Queries) ListSections(ctx context.Context, arg ListSectionsParams) ([]Section, error) {
 	rows, err := q.db.QueryContext(ctx, `
-SELECT id, title, color, created_by_admin_id, is_published, created_at, deleted_at, archived_at
+SELECT id, title, description, color, created_by_admin_id, is_published, created_at, deleted_at, archived_at
 FROM sections
 WHERE deleted_at IS NULL
   AND archived_at IS NULL
@@ -76,17 +77,18 @@ ORDER BY created_at DESC
 
 type UpdateSectionParams struct {
 	ID    uuid.UUID
-	Title string
-	Color string
+	Title       string
+	Description string
+	Color       string
 }
 
 func (q *Queries) UpdateSection(ctx context.Context, arg UpdateSectionParams) (Section, error) {
 	row := q.db.QueryRowContext(ctx, `
 UPDATE sections
-SET title = $2, color = $3
+SET title = $2, description = $3, color = $4
 WHERE id = $1 AND deleted_at IS NULL AND archived_at IS NULL
-RETURNING id, title, color, created_by_admin_id, is_published, created_at, deleted_at, archived_at
-`, arg.ID, arg.Title, arg.Color)
+RETURNING id, title, description, color, created_by_admin_id, is_published, created_at, deleted_at, archived_at
+`, arg.ID, arg.Title, arg.Description, arg.Color)
 	return scanSection(row)
 }
 
@@ -95,7 +97,17 @@ func (q *Queries) PublishSection(ctx context.Context, id uuid.UUID) (Section, er
 UPDATE sections
 SET is_published = true
 WHERE id = $1 AND deleted_at IS NULL AND archived_at IS NULL
-RETURNING id, title, color, created_by_admin_id, is_published, created_at, deleted_at, archived_at
+RETURNING id, title, description, color, created_by_admin_id, is_published, created_at, deleted_at, archived_at
+`, id)
+	return scanSection(row)
+}
+
+func (q *Queries) UnpublishSection(ctx context.Context, id uuid.UUID) (Section, error) {
+	row := q.db.QueryRowContext(ctx, `
+UPDATE sections
+SET is_published = false
+WHERE id = $1 AND deleted_at IS NULL AND archived_at IS NULL
+RETURNING id, title, description, color, created_by_admin_id, is_published, created_at, deleted_at, archived_at
 `, id)
 	return scanSection(row)
 }
@@ -105,7 +117,7 @@ func (q *Queries) ArchiveSection(ctx context.Context, id uuid.UUID) (Section, er
 UPDATE sections
 SET archived_at = NOW(), is_published = false
 WHERE id = $1 AND deleted_at IS NULL AND archived_at IS NULL
-RETURNING id, title, color, created_by_admin_id, is_published, created_at, deleted_at, archived_at
+RETURNING id, title, description, color, created_by_admin_id, is_published, created_at, deleted_at, archived_at
 `, id)
 	return scanSection(row)
 }
@@ -232,6 +244,17 @@ func (q *Queries) PublishLevel(ctx context.Context, id uuid.UUID) (Level, error)
 	row := q.db.QueryRowContext(ctx, `
 UPDATE levels
 SET is_published = true, updated_at = NOW()
+WHERE id = $1 AND deleted_at IS NULL
+RETURNING id, section_id, title, color, template_type, content, difficulty, is_published,
+          created_by_admin_id, created_at, updated_at, deleted_at, deleted_by
+`, id)
+	return scanLevel(row)
+}
+
+func (q *Queries) UnpublishLevel(ctx context.Context, id uuid.UUID) (Level, error) {
+	row := q.db.QueryRowContext(ctx, `
+UPDATE levels
+SET is_published = false, updated_at = NOW()
 WHERE id = $1 AND deleted_at IS NULL
 RETURNING id, section_id, title, color, template_type, content, difficulty, is_published,
           created_by_admin_id, created_at, updated_at, deleted_at, deleted_by
@@ -457,6 +480,7 @@ func scanSection(row scanner) (Section, error) {
 	err := row.Scan(
 		&section.ID,
 		&section.Title,
+		&section.Description,
 		&section.Color,
 		&section.CreatedByAdminID,
 		&section.IsPublished,

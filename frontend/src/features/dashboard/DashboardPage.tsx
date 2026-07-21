@@ -12,7 +12,7 @@ export default function DashboardPage() {
   const { user, logout } = useAuthStore();
   const setDeviceId = useSyncStore((s) => s.setDeviceId);
   const navigate = useNavigate();
-  const { colorBlindFilter, setColorBlindFilter } = useSettingsStore();
+  const { colorBlindFilter, setColorBlindFilter, theme, setTheme } = useSettingsStore();
   const canManageContent = user?.role === 'admin' || user?.role === 'operator' || user?.role === 'director';
 
   const dashboardQuery = useQuery({
@@ -63,7 +63,7 @@ export default function DashboardPage() {
                 id="color-filter"
                 value={colorBlindFilter}
                 onChange={(e) => setColorBlindFilter(e.target.value as ColorBlindFilter)}
-                className="text-sm border rounded px-2 py-1 bg-white text-slate-800 focus:outline-none focus-visible:ring-2"
+                className="text-sm border rounded px-2 py-1 bg-card text-text-card border-[--color-border] focus:outline-none focus-visible:ring-2"
               >
                 <option value="none">Normal</option>
                 <option value="deuteranopia">Deuteranopía (Verde-Rojo)</option>
@@ -71,6 +71,9 @@ export default function DashboardPage() {
                 <option value="tritanopia">Tritanopía (Azul-Amarillo)</option>
               </select>
             </div>
+            <Button variant="outline" size="sm" onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}>
+              {theme === 'dark' ? '☀️ Modo Claro' : '🌙 Modo Oscuro'}
+            </Button>
             <Button variant="outline" size="sm" onClick={() => navigate('/profile')}>
               Perfil
             </Button>
@@ -88,7 +91,7 @@ export default function DashboardPage() {
           </div>
         </header>
 
-        {error && <p className="rounded border border-[--color-error] bg-white p-3 text-[--color-error]">{error}</p>}
+        {error && <p className="rounded border border-[--color-error] bg-card p-3 text-[--color-error]">{error}</p>}
 
         <section className="grid gap-4 md:grid-cols-4">
           <Metric label="XP total" value={progress?.total_xp ?? 0} />
@@ -97,7 +100,7 @@ export default function DashboardPage() {
           <Metric label="Racha" value={progress?.current_streak ?? 0} />
         </section>
 
-        <section className="rounded-lg bg-white p-6 shadow-sm" aria-label="Secciones oficiales">
+        <section className="rounded-lg bg-card text-text-card p-6 shadow-sm" aria-label="Secciones oficiales">
           <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
             <h2 className="text-xl font-semibold">Secciones oficiales</h2>
             {canManageContent && (
@@ -108,17 +111,19 @@ export default function DashboardPage() {
           </div>
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
             {sections.map((section) => (
-              <article key={section.id} className="rounded-lg border border-[--color-border] bg-white p-5">
+              <article key={section.id} className="rounded-lg border border-[--color-border] bg-card text-text-card p-5">
                 <div className="mb-4 h-2 rounded" style={{ backgroundColor: section.color }} />
-                <h3 className="text-lg font-bold text-slate-900">{section.title}</h3>
-                <p className="mb-4 text-sm text-[--color-muted]">Contenido oficial publicado.</p>
+                <h3 className="text-lg font-bold">{section.title}</h3>
+                {section.description && (
+                  <p className="mb-4 text-sm text-[--color-muted]">{section.description}</p>
+                )}
                 <Button size="sm" onClick={() => navigate(`/sections/${section.id}`)}>
                   Ver niveles
                 </Button>
               </article>
             ))}
             {sections.length === 0 && (
-              <p className="rounded-lg border border-[--color-border] bg-white p-5 text-[--color-muted]">
+              <p className="rounded-lg border border-[--color-border] bg-card p-5 text-[--color-muted]">
                 No hay secciones publicadas.
               </p>
             )}
@@ -131,7 +136,7 @@ export default function DashboardPage() {
 
 function Metric({ label, value }: { label: string; value: number }) {
   return (
-    <div className="rounded-lg bg-white p-5 shadow-sm">
+    <div className="rounded-lg bg-card text-text-card p-5 shadow-sm">
       <p className="text-sm text-[--color-muted]">{label}</p>
       <p className="text-3xl font-bold text-[--color-primary]">{value}</p>
     </div>

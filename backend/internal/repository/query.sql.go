@@ -9,7 +9,6 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
-	"net"
 	"time"
 
 	"github.com/google/uuid"
@@ -97,7 +96,7 @@ type CreateUserParams struct {
 	FullName                string    `json:"full_name"`
 	Column3                 string    `json:"column_3"`
 	EmailLookupHash         []byte    `json:"email_lookup_hash"`
-	Phone                   string    `json:"phone"`
+	Column5                 string    `json:"column_5"`
 	PhoneLookupHash         []byte    `json:"phone_lookup_hash"`
 	PasswordHash            string    `json:"password_hash"`
 	TokenVersion            int32     `json:"token_version"`
@@ -117,7 +116,7 @@ func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (User, e
 		arg.FullName,
 		arg.Column3,
 		arg.EmailLookupHash,
-		arg.Phone,
+		arg.Column5,
 		arg.PhoneLookupHash,
 		arg.PasswordHash,
 		arg.TokenVersion,
@@ -469,7 +468,7 @@ type LogAdminAuditParams struct {
 	EntityID    uuid.NullUUID         `json:"entity_id"`
 	BeforeState pqtype.NullRawMessage `json:"before_state"`
 	AfterState  pqtype.NullRawMessage `json:"after_state"`
-	IpAddress   net.IP                `json:"ip_address"`
+	IpAddress   string                `json:"ip_address"`
 	UserAgent   string                `json:"user_agent"`
 }
 

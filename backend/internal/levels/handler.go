@@ -3,6 +3,7 @@ package levels
 import (
 	"encoding/json"
 	"errors"
+	"log"
 	"net/http"
 	"strconv"
 
@@ -152,6 +153,26 @@ func (h *Handler) PublishLevel(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, resp)
 }
 
+func (h *Handler) UnpublishLevel(w http.ResponseWriter, r *http.Request) {
+	claims, ok := r.Context().Value(domain.ClaimsKey).(*domain.JWTClaims)
+	if !ok || !canManageContent(claims.Role) {
+		writeProblem(w, r, http.StatusForbidden, "forbidden", "Forbidden", "Only content managers can unpublish levels")
+		return
+	}
+
+	levelID, ok := parseURLUUID(w, r, "level_id")
+	if !ok {
+		return
+	}
+
+	resp, err := h.svc.UnpublishLevel(r.Context(), claims.UserID, levelID)
+	if err != nil {
+		writeServiceError(w, r, err, "Could not unpublish level")
+		return
+	}
+	writeJSON(w, http.StatusOK, resp)
+}
+
 func (h *Handler) ArchiveLevel(w http.ResponseWriter, r *http.Request) {
 	claims, ok := r.Context().Value(domain.ClaimsKey).(*domain.JWTClaims)
 	if !ok || !canArchiveContent(claims.Role) {
@@ -228,6 +249,7 @@ func (h *Handler) CreateSection(w http.ResponseWriter, r *http.Request) {
 
 	resp, err := h.svc.CreateSection(r.Context(), claims.UserID, req)
 	if err != nil {
+		log.Printf("CreateSection error: %v", err)
 		writeServiceError(w, r, err, "Could not create section")
 		return
 	}
@@ -287,6 +309,26 @@ func (h *Handler) PublishSection(w http.ResponseWriter, r *http.Request) {
 	resp, err := h.svc.PublishSection(r.Context(), claims.UserID, sectionID)
 	if err != nil {
 		writeServiceError(w, r, err, "Could not publish section")
+		return
+	}
+	writeJSON(w, http.StatusOK, resp)
+}
+
+func (h *Handler) UnpublishSection(w http.ResponseWriter, r *http.Request) {
+	claims, ok := r.Context().Value(domain.ClaimsKey).(*domain.JWTClaims)
+	if !ok || !canManageContent(claims.Role) {
+		writeProblem(w, r, http.StatusForbidden, "forbidden", "Forbidden", "Only content managers can unpublish sections")
+		return
+	}
+
+	sectionID, ok := parseURLUUID(w, r, "section_id")
+	if !ok {
+		return
+	}
+
+	resp, err := h.svc.UnpublishSection(r.Context(), claims.UserID, sectionID)
+	if err != nil {
+		writeServiceError(w, r, err, "Could not unpublish section")
 		return
 	}
 	writeJSON(w, http.StatusOK, resp)

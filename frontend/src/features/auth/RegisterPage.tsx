@@ -5,6 +5,21 @@ import { Input } from '../../components/ui/Input';
 import { apiClient } from '../../lib/apiClient';
 import axios from 'axios';
 
+const EyeIcon = () => (
+  <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z" />
+    <circle cx="12" cy="12" r="3" />
+  </svg>
+);
+const EyeOffIcon = () => (
+  <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M9.88 9.88a3 3 0 1 0 4.24 4.24" />
+    <path d="M10.73 5.08A10.43 10.43 0 0 1 12 5c7 0 10 7 10 7a13.16 13.16 0 0 1-1.67 2.68" />
+    <path d="M6.61 6.61A13.526 13.526 0 0 0 2 12s3 7 10 7a9.74 9.74 0 0 0 5.39-1.61" />
+    <line x1="2" x2="22" y1="2" y2="22" />
+  </svg>
+);
+
 interface ProblemDetails {
   type: string;
   title: string;
@@ -25,7 +40,9 @@ export default function RegisterPage() {
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [confirmPassword, setConfirmPassword] = useState('');
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [isAdult, setIsAdult] = useState(false);
   const [tutorName, setTutorName] = useState('');
   const [tutorEmail, setTutorEmail] = useState('');
@@ -123,20 +140,40 @@ export default function RegisterPage() {
           <Input
             id="reg-password"
             label="Contraseña"
-            type="password"
+            type={showPassword ? 'text' : 'password'}
             value={password}
             onChange={(e) => setPassword(e.currentTarget.value)}
             required
+            rightIcon={
+              <button
+                type="button"
+                onClick={() => setShowPassword(!showPassword)}
+                aria-label={showPassword ? 'Ocultar contraseña' : 'Mostrar contraseña'}
+                className="p-1 hover:text-[--color-foreground] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[--color-primary] rounded"
+              >
+                {showPassword ? <EyeOffIcon /> : <EyeIcon />}
+              </button>
+            }
           />
 
           <Input
             id="reg-confirm-password"
             label="Confirmar contraseña"
-            type="password"
+            type={showConfirmPassword ? 'text' : 'password'}
             value={confirmPassword}
             onChange={(e) => setConfirmPassword(e.currentTarget.value)}
             required
             error={error ?? undefined}
+            rightIcon={
+              <button
+                type="button"
+                onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                aria-label={showConfirmPassword ? 'Ocultar contraseña' : 'Mostrar contraseña'}
+                className="p-1 hover:text-[--color-foreground] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[--color-primary] rounded"
+              >
+                {showConfirmPassword ? <EyeOffIcon /> : <EyeIcon />}
+              </button>
+            }
           />
 
           <div className="space-y-2 pt-2">
@@ -181,19 +218,19 @@ export default function RegisterPage() {
                 onChange={(e) => setPrivacyAccepted(e.target.checked)}
               />
               <span style={{ color: 'var(--color-muted)' }}>
-                He leído y acepto el <a href="/privacidad" target="_blank" rel="noreferrer" style={{ color: 'var(--color-primary)' }} className="underline">Aviso de Privacidad</a>.
+                He leído y acepto el <Link to="/privacidad" target="_blank" rel="noreferrer" style={{ color: 'var(--color-primary)' }} className="underline">Aviso de Privacidad</Link>.
               </span>
             </label>
           </div>
 
           <Button
             type="submit"
-            variant="primary"
             size="lg"
-            className="w-full"
+            className="w-full bg-green-500 hover:bg-green-600 text-white font-bold"
+            style={{ backgroundColor: '#22c55e', color: 'white' }}
             disabled={loading}
           >
-            {loading ? 'Registrando...' : 'Registrar cuenta'}
+            {loading ? 'Registrando...' : 'Registrar'}
           </Button>
         </form>
         

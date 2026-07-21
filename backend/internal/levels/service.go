@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"net"
 	"net/url"
 	"strings"
 	"time"
@@ -138,6 +137,35 @@ func (s *Service) PublishLevel(ctx context.Context, adminID, levelID uuid.UUID) 
 	return resp, nil
 }
 
+func (s *Service) UnpublishLevel(ctx context.Context, adminID, levelID uuid.UUID) (LevelResponse, error) {
+	if levelID == uuid.Nil {
+		return LevelResponse{}, ErrValidation
+	}
+	tx, err := s.repo.BeginTx(ctx, &sql.TxOptions{})
+	if err != nil {
+		return LevelResponse{}, err
+	}
+	defer func() { _ = tx.Rollback() }()
+	qtx := s.repo.WithTx(tx)
+
+	level, err := qtx.UnpublishLevel(ctx, levelID)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return LevelResponse{}, ErrNotFound
+		}
+		return LevelResponse{}, err
+	}
+	resp := levelToResponse(level)
+	if err := logAdminAudit(ctx, qtx, adminID, "level.unpublish", "level", level.ID, nil, levelAuditPayload(resp)); err != nil {
+		return LevelResponse{}, err
+	}
+	if err := tx.Commit(); err != nil {
+		return LevelResponse{}, err
+	}
+	return resp, nil
+}
+
+
 func (s *Service) ArchiveLevel(ctx context.Context, adminID, levelID uuid.UUID) (LevelResponse, error) {
 	if adminID == uuid.Nil || levelID == uuid.Nil {
 		return LevelResponse{}, ErrValidation
@@ -239,6 +267,7 @@ func (s *Service) CreateSection(ctx context.Context, adminID uuid.UUID, req Crea
 	section, err := qtx.CreateSectionReturning(ctx, repository.CreateSectionReturningParams{
 		ID:               newID(),
 		Title:            strings.TrimSpace(req.Title),
+		Description:      strings.TrimSpace(req.Description),
 		Color:            strings.TrimSpace(req.Color),
 		IsPublished:      false,
 		CreatedByAdminID: uuid.NullUUID{UUID: adminID, Valid: true},
@@ -280,9 +309,10 @@ func (s *Service) UpdateSection(ctx context.Context, adminID, sectionID uuid.UUI
 	qtx := s.repo.WithTx(tx)
 
 	section, err := qtx.UpdateSection(ctx, repository.UpdateSectionParams{
-		ID:    sectionID,
-		Title: strings.TrimSpace(req.Title),
-		Color: strings.TrimSpace(req.Color),
+		ID:          sectionID,
+		Title:       strings.TrimSpace(req.Title),
+		Description: strings.TrimSpace(req.Description),
+		Color:       strings.TrimSpace(req.Color),
 	})
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
@@ -320,6 +350,34 @@ func (s *Service) PublishSection(ctx context.Context, adminID, sectionID uuid.UU
 	}
 	resp := sectionToResponse(section)
 	if err := logAdminAudit(ctx, qtx, adminID, "section.publish", "section", section.ID, nil, resp); err != nil {
+		return SectionResponse{}, err
+	}
+	if err := tx.Commit(); err != nil {
+		return SectionResponse{}, err
+	}
+	return resp, nil
+}
+
+func (s *Service) UnpublishSection(ctx context.Context, adminID, sectionID uuid.UUID) (SectionResponse, error) {
+	if sectionID == uuid.Nil {
+		return SectionResponse{}, ErrValidation
+	}
+	tx, err := s.repo.BeginTx(ctx, &sql.TxOptions{})
+	if err != nil {
+		return SectionResponse{}, err
+	}
+	defer func() { _ = tx.Rollback() }()
+	qtx := s.repo.WithTx(tx)
+
+	section, err := qtx.UnpublishSection(ctx, sectionID)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return SectionResponse{}, ErrNotFound
+		}
+		return SectionResponse{}, err
+	}
+	resp := sectionToResponse(section)
+	if err := logAdminAudit(ctx, qtx, adminID, "section.unpublish", "section", section.ID, nil, resp); err != nil {
 		return SectionResponse{}, err
 	}
 	if err := tx.Commit(); err != nil {
@@ -798,7 +856,7 @@ func logAdminAudit(ctx context.Context, repo *repository.Queries, actorID uuid.U
 		EntityID:    uuid.NullUUID{UUID: entityID, Valid: entityID != uuid.Nil},
 		BeforeState: before,
 		AfterState:  after,
-		IpAddress:   net.ParseIP("0.0.0.0"),
+		IpAddress:   "0.0.0.0",
 		UserAgent:   "backend-service",
 	})
 }
@@ -849,6 +907,7 @@ func sectionToResponse(section repository.Section) SectionResponse {
 	resp := SectionResponse{
 		ID:          section.ID,
 		Title:       section.Title,
+		Description: section.Description,
 		Color:       section.Color,
 		IsPublished: section.IsPublished,
 		CreatedAt:   section.CreatedAt,

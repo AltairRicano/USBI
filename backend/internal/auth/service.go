@@ -107,7 +107,7 @@ func (s *Service) Register(ctx context.Context, req RegisterRequest) (RegisterRe
 		FullName:                req.FullName,
 		Column3:                 strings.TrimSpace(req.Email), // $3 → pgp_sym_encrypt(email)
 		EmailLookupHash:         emailHash,
-		Phone:                   phone,
+		Column5:                 phone,
 		PhoneLookupHash:         phoneHash,
 		PasswordHash:            passwordHash,
 		TokenVersion:            1,

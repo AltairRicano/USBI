@@ -4,6 +4,7 @@ import { ProtectedRoute } from './features/auth/ProtectedRoute';
 
 const LoginPage = lazy(() => import('./features/auth/LoginPage'));
 const RegisterPage = lazy(() => import('./features/auth/RegisterPage'));
+const PrivacyPage = lazy(() => import('./features/legal/PrivacyPage'));
 const DashboardPage = lazy(() => import('./features/dashboard/DashboardPage'));
 const MakerPage = lazy(() => import('./features/maker').then((mod) => ({ default: mod.MakerPage })));
 const AdminContentPage = lazy(() => import('./features/content/AdminContentPage').then((mod) => ({ default: mod.AdminContentPage })));
@@ -51,6 +52,7 @@ export default function App() {
           {/* Rutas públicas */}
           <Route path="/login" element={<LoginPage />} />
           <Route path="/register" element={<RegisterPage />} />
+          <Route path="/privacidad" element={<PrivacyPage />} />
 
           {/* Rutas protegidas */}
           <Route

@@ -23,13 +23,13 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
           'focus-visible:ring-[--color-primary] focus-visible:ring-offset-2',
           // Variantes
           {
-            'bg-[--color-primary] text-white hover:bg-[--color-primary-hover]':
+            'bg-[var(--color-primary)] text-white hover:bg-[var(--color-primary-hover)]':
               variant === 'primary',
-            'bg-[--color-secondary-dark] text-white hover:opacity-90':
+            'bg-[var(--color-secondary-dark)] text-white hover:opacity-90':
               variant === 'secondary',
-            'border-2 border-[--color-primary] text-[--color-primary] hover:bg-[--color-primary] hover:text-white':
+            'border-2 border-[var(--color-primary)] text-[var(--color-primary)] hover:bg-[var(--color-primary)] hover:text-white':
               variant === 'outline',
-            'bg-[--color-error] text-white hover:opacity-90':
+            'bg-[var(--color-error)] text-white hover:opacity-90':
               variant === 'danger',
             'hover:bg-gray-100 text-gray-700':
               variant === 'ghost',

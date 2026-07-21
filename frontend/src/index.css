@@ -9,6 +9,26 @@
      - secondary sobre blanco → 2.92:1 ✗ → usar solo como acento
    ============================================================ */
 
+:root {
+  --theme-bg: #FFFFFF;
+  --theme-fg: #000000;
+  --theme-surface: #F5F5F5;
+  --theme-muted: #4A4A4A;
+  --theme-border: #D1D5DB;
+  --theme-card: #FFFFFF;
+  --theme-text-card: #0f172a;
+}
+
+html.dark {
+  --theme-bg: #0f172a;
+  --theme-fg: #f8fafc;
+  --theme-surface: #1e293b;
+  --theme-muted: #94a3b8;
+  --theme-border: #334155;
+  --theme-card: #1e293b;
+  --theme-text-card: #f8fafc;
+}
+
 @theme {
   /* ── Paleta institucional UV ─────────────────────────────── */
   --color-primary:            #18529D; /* Azul UV – botones, encabezados, links */
@@ -19,12 +39,14 @@
   --color-secondary-dark:     #006633; /* Verde oscuro – texto sobre blanco (WCAG ✓) */
   --color-secondary-foreground: #000000;
 
-  /* ── Neutros ─────────────────────────────────────────────── */
-  --color-background:   #FFFFFF;
-  --color-foreground:   #000000;
-  --color-surface:      #F5F5F5; /* Fondo de tarjetas / secciones */
-  --color-muted:        #4A4A4A; /* Texto secundario */
-  --color-border:       #D1D5DB;
+  /* ── Neutros (Dinámicos por Tema) ────────────────────────── */
+  --color-background:   var(--theme-bg);
+  --color-foreground:   var(--theme-fg);
+  --color-surface:      var(--theme-surface);
+  --color-muted:        var(--theme-muted);
+  --color-border:       var(--theme-border);
+  --color-card:         var(--theme-card);
+  --color-text-card:    var(--theme-text-card);
 
   /* ── Estado (accesibles WCAG) ────────────────────────────── */
   --color-success:      #006633; /* Verde oscuro + texto blanco → 7.43:1 ✓ */

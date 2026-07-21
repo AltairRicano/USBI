@@ -26,11 +26,31 @@ export default defineConfig(async () => ({
       : undefined,
     watch: {
       // 3. tell Vite to ignore watching `src-tauri`
-      ignored: ["**/src-tauri/**"],
+      ignored: ["**/src-tauri/**"]
     },
+    proxy: {
+      "/api": {
+        target: "http://192.168.1.210:8088",
+        changeOrigin: true
+      },
+    },
+    allowedHosts: ["project.heimdall-lab.com"],
   },
   test: {
     environment: 'jsdom',
     globals: true,
+  },
+  preview: {
+    allowedHosts: ["project.heimdall-lab.com"],
+  },
+  build: {
+    chunkSizeWarningLimit: 2000, // Phaser es > 1MB, evitamos el warning
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          phaser: ['phaser'],
+        }
+      }
+    }
   }
 }));

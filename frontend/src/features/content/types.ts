@@ -12,6 +12,7 @@ export type TemplateType =
 export interface SectionDTO {
   id: string;
   title: string;
+  description: string;
   color: string;
   is_published: boolean;
   created_by_admin_id?: string;

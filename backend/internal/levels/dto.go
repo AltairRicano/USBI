@@ -50,18 +50,21 @@ type LevelResponse struct {
 }
 
 type CreateSectionRequest struct {
-	Title string `json:"title"`
-	Color string `json:"color"`
+	Title       string `json:"title"`
+	Description string `json:"description"`
+	Color       string `json:"color"`
 }
 
 type UpdateSectionRequest struct {
-	Title string `json:"title"`
-	Color string `json:"color"`
+	Title       string `json:"title"`
+	Description string `json:"description"`
+	Color       string `json:"color"`
 }
 
 type SectionResponse struct {
 	ID               uuid.UUID `json:"id"`
 	Title            string    `json:"title"`
+	Description      string    `json:"description"`
 	Color            string    `json:"color"`
 	IsPublished      bool      `json:"is_published"`
 	CreatedByAdminID uuid.UUID `json:"created_by_admin_id,omitempty"`

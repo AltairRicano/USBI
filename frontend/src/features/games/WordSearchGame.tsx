@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useMemo } from 'react';
+import { useEffect, useRef, useState, useMemo, useCallback } from 'react';
 import Phaser from 'phaser';
 import { invoke } from '@tauri-apps/api/core';
 import { WordSearchEngine, WordSearchState } from '@usbi/engine';
@@ -16,7 +16,6 @@ interface WordSearchGameProps {
 
 export function WordSearchGame({ words, width = 10, height = 10, seed = 1234, onFinish }: WordSearchGameProps) {
   const phaserRef = useRef<IRefPhaserGame | null>(null);
-  const engineRef = useRef<WordSearchEngine | null>(null);
   const [state, setState] = useState<WordSearchState | null>(null);
 
   const engine = useMemo(() => new WordSearchEngine(words, width, height, seed), [words, width, height, seed]);
@@ -33,7 +32,8 @@ export function WordSearchGame({ words, width = 10, height = 10, seed = 1234, on
     };
     setup();
 
-    engineRef.current = engine;
+    // Set initial state from engine
+    setState({ ...engine.getState() });
 
     const unsubscribe = engine.subscribe((newState) => {
       setState({ ...newState });
@@ -57,28 +57,28 @@ export function WordSearchGame({ words, width = 10, height = 10, seed = 1234, on
 
   const gameConfig: Phaser.Types.Core.GameConfig = useMemo(() => ({
     type: Phaser.AUTO,
-    width: 800,
-    height: 600,
+    width: 500,
+    height: 500,
     backgroundColor: '#ffffff',
-    scene: [WordSearchScene]
+    scene: [WordSearchScene],
+    scale: {
+      mode: Phaser.Scale.FIT,
+      autoCenter: Phaser.Scale.CENTER_BOTH,
+    },
   }), []);
 
-  useEffect(() => {
-    if (phaserRef.current?.game) {
-       const game = phaserRef.current.game;
-       game.events.once('ready', () => {
-          game.scene.start('WordSearchScene', { engine, onFinish });
-       });
-    }
-  }, [phaserRef, engine, onFinish]);
+  // This callback is guaranteed to fire after Phaser is ready
+  const handleGameReady = useCallback((game: Phaser.Game) => {
+    game.scene.start('WordSearchScene', { engine, onFinish });
+  }, [engine, onFinish]);
 
   if (!state) return <div>Loading...</div>;
 
   return (
     <Card className="w-full max-w-4xl mx-auto mt-8 flex flex-col md:flex-row gap-4">
       <CardContent className="flex-1 p-0">
-        <div className="w-full aspect-video rounded-xl overflow-hidden relative min-h-[400px]">
-           <PhaserGame ref={phaserRef} config={gameConfig} />
+        <div className="w-full rounded-xl overflow-hidden relative" style={{ minHeight: '500px' }}>
+           <PhaserGame ref={phaserRef} config={gameConfig} onGameReady={handleGameReady} />
         </div>
       </CardContent>
       <div className="w-full md:w-64 p-6 border-l border-[--color-border] flex flex-col gap-4">
@@ -88,7 +88,7 @@ export function WordSearchGame({ words, width = 10, height = 10, seed = 1234, on
           {state.words.map((word, i) => (
             <li 
               key={i}
-              className={`text-lg transition-colors ${state.foundWords.includes(word) ? 'text-gray-300 line-through' : 'text-gray-800'}`}
+              className={`text-lg transition-colors ${state.foundWords.includes(word) ? 'text-gray-300 line-through' : 'text-gray-800 dark:text-gray-200'}`}
             >
               {word}
             </li>

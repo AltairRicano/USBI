@@ -25,7 +25,7 @@ func (h *Handler) RegisterDevice(w http.ResponseWriter, r *http.Request) {
 
 	var req RegisterDeviceRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeProblem(w, r, http.StatusBadRequest, "bad-request", "Bad Request", "Invalid JSON body")
+		writeDecodeProblem(w, r, err)
 		return
 	}
 
@@ -53,6 +53,17 @@ func (h *Handler) ListDevices(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, resp)
+}
+
+func writeDecodeProblem(w http.ResponseWriter, r *http.Request, err error) {
+	var maxBytesErr *http.MaxBytesError
+	if errors.As(err, &maxBytesErr) {
+		writeProblem(w, r, http.StatusRequestEntityTooLarge, "payload-too-large",
+			"Payload Too Large", "Request body exceeds the configured size limit")
+		return
+	}
+
+	writeProblem(w, r, http.StatusBadRequest, "bad-request", "Bad Request", "Invalid JSON body")
 }
 
 func writeProblem(w http.ResponseWriter, r *http.Request, status int, errorSlug, title, detail string) {

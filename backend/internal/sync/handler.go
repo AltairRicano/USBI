@@ -29,6 +29,12 @@ func (h *Handler) SyncData(w http.ResponseWriter, r *http.Request) {
 	// Read the body once. HMAC verification uses the decoded canonical payload.
 	rawBody, err := io.ReadAll(r.Body)
 	if err != nil {
+		var maxBytesErr *http.MaxBytesError
+		if errors.As(err, &maxBytesErr) {
+			writeProblem(w, r, http.StatusRequestEntityTooLarge, "payload-too-large",
+				"Payload Too Large", "Request body exceeds the configured size limit")
+			return
+		}
 		writeProblem(w, r, http.StatusBadRequest, "bad-request",
 			"Bad Request", "Could not read request body")
 		return

@@ -27,10 +27,14 @@ type RouterDependencies struct {
 	ReadyCheck     func(context.Context) error
 	TokenCfg       crypto.TokenConfig
 	Queries        *repository.Queries
+	// MaxBodyBytes caps incoming API request bodies. Defaults to 6 MiB.
+	MaxBodyBytes int64
 	// AllowedOrigin is the CORS Allow-Origin value.
 	// Defaults to "https://usbi.edu.mx" if empty.
 	AllowedOrigin string
 }
+
+const defaultMaxBodyBytes int64 = 6 * 1024 * 1024
 
 // ClaimsFromContext extracts the JWT claims injected by jwtAuthMiddleware.
 // Returns nil if no claims are present (public route or missing middleware).
@@ -56,6 +60,7 @@ func SetupRoutes(r chi.Router, deps RouterDependencies) {
 	r.Use(middleware.Logger)
 	r.Use(middleware.Recoverer)
 	r.Use(corsMiddleware(origin))
+	r.Use(maxBodyBytesMiddleware(deps.MaxBodyBytes))
 
 	r.Route("/api/v1", func(r chi.Router) {
 		// ── Public routes ─────────────────────────────────────────────────────
@@ -138,6 +143,20 @@ func SetupRoutes(r chi.Router, deps RouterDependencies) {
 	r.Get("/health", healthHandler)
 	r.Get("/health/live", healthHandler)
 	r.Get("/health/ready", readyHandler(deps.ReadyCheck))
+}
+
+func maxBodyBytesMiddleware(maxBytes int64) func(http.Handler) http.Handler {
+	if maxBytes <= 0 {
+		maxBytes = defaultMaxBodyBytes
+	}
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.Body != nil {
+				r.Body = http.MaxBytesReader(w, r.Body, maxBytes)
+			}
+			next.ServeHTTP(w, r)
+		})
+	}
 }
 
 // healthHandler returns a simple liveness probe response.

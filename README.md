@@ -23,8 +23,11 @@ USBI_BACKEND_ENV_FILE=.env.server go run .
 El backend toma puerto, CORS y base de datos desde variables:
 `SERVER_PORT`, `CORS_ALLOWED_ORIGIN`, `DB_HOST`, `DB_PORT`, `DB_USER`,
 `DB_PASSWORD`, `DB_NAME` y `DB_SSLMODE`. Si prefieres una cadena completa,
-`DATABASE_URL` también es aceptada y tiene prioridad. No debe editarse código
-para pasar de local a servidor.
+`DATABASE_URL` también es aceptada y tiene prioridad. El pool de PostgreSQL se
+ajusta con `DB_MAX_OPEN_CONNS`, `DB_MAX_IDLE_CONNS`, `DB_CONN_MAX_LIFETIME` y
+`DB_CONN_MAX_IDLE_TIME`; los ejemplos usan un perfil conservador para el
+servidor final de 1 vCPU / 1 GB RAM. No debe editarse código para pasar de local
+a servidor.
 
 La fuente de verdad del esquema es `backend/migrations/`; `backend/sqlc.yaml`
 genera repositorios a partir de esas migraciones y `backend/sql/query.sql`.

@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent } from 'react';
+import { useEffect, useState, useMemo, type FormEvent } from 'react';
 import { Link } from 'react-router-dom';
 import axios from 'axios';
 import { Button } from '../../components/ui/Button';
@@ -24,10 +24,25 @@ export function AdminContentPage() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   
-  // Maker state
   const [showMaker, setShowMaker] = useState(false);
   const [makerInitialData, setMakerInitialData] = useState<any>(null);
   const [loadingLevelID, setLoadingLevelID] = useState<string | null>(null);
+
+  // Accordion state
+  const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({});
+
+  const levelsBySection = useMemo(() => {
+    const groups: Record<string, LevelSummaryDTO[]> = {};
+    for (const lvl of levels) {
+      if (!groups[lvl.section_id]) groups[lvl.section_id] = [];
+      groups[lvl.section_id].push(lvl);
+    }
+    return groups;
+  }, [levels]);
+
+  const toggleSection = (id: string) => {
+    setExpandedSections((prev) => ({ ...prev, [id]: !prev[id] }));
+  };
 
   async function loadContent() {
     setError(null);
@@ -177,101 +192,114 @@ export function AdminContentPage() {
         )}
 
         {!showMaker && (
-          <>
-            <section className="rounded-lg bg-[--color-card] p-5 shadow-sm">
-              <h2 className="mb-4 text-xl font-semibold">Secciones</h2>
-              {editingSection && (
-                <form onSubmit={saveSectionEdit} className="mb-5 rounded-lg border border-[--color-border] p-4">
-                  <h3 className="mb-3 font-semibold">Editar sección</h3>
-                  <div className="grid gap-3 md:grid-cols-[1fr_140px_auto] md:items-end">
-                    <Input
-                      id="edit-section-title"
-                      label="Título de sección"
-                      value={editingSection.title}
-                      onChange={(e) => setEditingSection({ ...editingSection, title: e.currentTarget.value })}
-                      required
-                    />
-                    <Input
-                      id="edit-section-description"
-                      label="Descripción"
-                      value={editingSection.description}
-                      onChange={(e) => setEditingSection({ ...editingSection, description: e.currentTarget.value })}
-                    />
-                    <Input
-                      id="edit-section-color"
-                      label="Color"
-                      type="color"
-                      value={editingSection.color}
-                      onChange={(e) => setEditingSection({ ...editingSection, color: e.currentTarget.value })}
-                      required
-                    />
-                    <div className="flex gap-2">
-                      <Button type="submit" size="sm" disabled={loading}>Guardar</Button>
-                      <Button type="button" size="sm" variant="outline" onClick={() => setEditingSection(null)}>
-                        Cancelar
-                      </Button>
-                    </div>
+          <section className="rounded-lg bg-[--color-card] p-5 shadow-sm">
+            <h2 className="mb-4 text-xl font-semibold">Secciones y Niveles</h2>
+            {editingSection && (
+              <form onSubmit={saveSectionEdit} className="mb-5 rounded-lg border border-[--color-border] p-4">
+                <h3 className="mb-3 font-semibold">Editar sección</h3>
+                <div className="grid gap-3 md:grid-cols-[1fr_140px_auto] md:items-end">
+                  <Input
+                    id="edit-section-title"
+                    label="Título de sección"
+                    value={editingSection.title}
+                    onChange={(e) => setEditingSection({ ...editingSection, title: e.currentTarget.value })}
+                    required
+                  />
+                  <Input
+                    id="edit-section-description"
+                    label="Descripción"
+                    value={editingSection.description}
+                    onChange={(e) => setEditingSection({ ...editingSection, description: e.currentTarget.value })}
+                  />
+                  <Input
+                    id="edit-section-color"
+                    label="Color"
+                    type="color"
+                    value={editingSection.color}
+                    onChange={(e) => setEditingSection({ ...editingSection, color: e.currentTarget.value })}
+                    required
+                  />
+                  <div className="flex gap-2">
+                    <Button type="submit" size="sm" disabled={loading}>Guardar</Button>
+                    <Button type="button" size="sm" variant="outline" onClick={() => setEditingSection(null)}>
+                      Cancelar
+                    </Button>
                   </div>
-                </form>
-              )}
-              <div className="divide-y">
-                {sections.map((section) => (
-                  <div key={section.id} className="flex flex-wrap items-center justify-between gap-3 py-3">
-                    <div>
-                      <p className="font-semibold">{section.title}</p>
-                      <p className="text-sm text-[--color-muted]">{section.description || 'Sin descripción'}</p>
+                </div>
+              </form>
+            )}
+            <div className="divide-y">
+              {sections.map((section) => {
+                const sectionLevels = levelsBySection[section.id] || [];
+                const isExpanded = expandedSections[section.id];
+                return (
+                  <div key={section.id} className="py-3">
+                    <div 
+                      className="flex flex-wrap items-center justify-between gap-3 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800/50 p-2 rounded transition-colors"
+                      onClick={() => toggleSection(section.id)}
+                    >
+                      <div className="flex items-center gap-2">
+                        <span className="text-[--color-muted] w-5 text-center text-xs">
+                          {isExpanded ? '▼' : '▶'}
+                        </span>
+                        <div>
+                          <p className="font-semibold">{section.title} <span className="text-xs font-normal text-[--color-muted] bg-[--color-surface] px-2 py-0.5 rounded-full ml-2 border border-[--color-border]">{sectionLevels.length} niveles</span></p>
+                          <p className="text-sm text-[--color-muted]">{section.description || 'Sin descripción'}</p>
+                        </div>
+                      </div>
+                      <div className="flex gap-2" onClick={(e) => e.stopPropagation()}>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => setEditingSection({ id: section.id, title: section.title, description: section.description, color: section.color })}
+                        >
+                          Editar
+                        </Button>
+                        {!section.is_published && <Button size="sm" onClick={() => void publishSection(section.id)}>Publicar</Button>}
+                        {section.is_published && <Button size="sm" variant="outline" onClick={() => void unpublishSection(section.id)}>Ocultar</Button>}
+                        <Button size="sm" variant="outline" onClick={() => void archiveSection(section.id)}>Archivar</Button>
+                      </div>
                     </div>
-                    <div className="flex gap-2">
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => setEditingSection({ id: section.id, title: section.title, description: section.description, color: section.color })}
-                      >
-                        Editar
-                      </Button>
-                      {!section.is_published && <Button size="sm" onClick={() => void publishSection(section.id)}>Publicar</Button>}
-                      {section.is_published && <Button size="sm" variant="outline" onClick={() => void unpublishSection(section.id)}>Ocultar</Button>}
-                      <Button size="sm" variant="outline" onClick={() => void archiveSection(section.id)}>Archivar</Button>
-                    </div>
+                    {isExpanded && (
+                      <div className="mt-3 pl-6 pr-2 border-l-2 border-[--color-border] ml-4 bg-[--color-surface]/30 rounded-r-lg">
+                        <div className="divide-y divide-dashed border-t border-[--color-border] mt-2">
+                          {sectionLevels.map((level) => (
+                            <div key={level.id} className="flex flex-wrap items-center justify-between gap-3 py-3">
+                              <div>
+                                <p className="font-medium text-sm">{level.title}</p>
+                                <p className="text-xs text-[--color-muted]">
+                                  {level.template_type} · dificultad {level.difficulty} · {level.is_published ? 'Publicado' : 'Borrador'}
+                                </p>
+                              </div>
+                              <div className="flex gap-2 items-center">
+                                <Button size="sm" variant="outline" className="h-8 px-2 text-xs flex items-center justify-center">
+                                  <Link to={`/levels/${level.id}/play`} className="flex items-center h-full">Previsualizar</Link>
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  className="h-8 px-2 text-xs"
+                                  disabled={loadingLevelID === level.id}
+                                  onClick={() => void startLevelEdit(level.id)}
+                                >
+                                  {loadingLevelID === level.id ? 'Cargando' : 'Editar'}
+                                </Button>
+                                {!level.is_published && <Button size="sm" className="h-8 px-2 text-xs bg-[#22c55e] hover:bg-[#16a34a] text-white" onClick={() => void publishLevel(level.id)}>Publicar</Button>}
+                                {level.is_published && <Button size="sm" variant="outline" className="h-8 px-2 text-xs" onClick={() => void unpublishLevel(level.id)}>Ocultar</Button>}
+                                <Button size="sm" variant="outline" className="h-8 px-2 text-xs border-[--color-error] text-[--color-error] hover:bg-[--color-error] hover:text-white" onClick={() => void archiveLevel(level.id)}>Archivar</Button>
+                              </div>
+                            </div>
+                          ))}
+                          {sectionLevels.length === 0 && <p className="py-3 text-sm text-[--color-muted]">No hay niveles en esta sección.</p>}
+                        </div>
+                      </div>
+                    )}
                   </div>
-                ))}
-                {sections.length === 0 && <p className="py-4 text-sm text-[--color-muted]">No hay secciones.</p>}
-              </div>
-            </section>
-
-            <section className="rounded-lg bg-[--color-card] p-5 shadow-sm">
-              <h2 className="mb-4 text-xl font-semibold">Niveles</h2>
-              <div className="divide-y">
-                {levels.map((level) => (
-                  <div key={level.id} className="flex flex-wrap items-center justify-between gap-3 py-3">
-                    <div>
-                      <p className="font-semibold">{level.title}</p>
-                      <p className="text-sm text-[--color-muted]">
-                        {level.template_type} · dificultad {level.difficulty} · {level.is_published ? 'Publicado' : 'Borrador'}
-                      </p>
-                    </div>
-                    <div className="flex gap-2 items-center">
-                      <Button size="sm" variant="outline" className="h-9 px-3 flex items-center justify-center">
-                        <Link to={`/levels/${level.id}/play`} className="flex items-center h-full">Previsualizar</Link>
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        disabled={loadingLevelID === level.id}
-                        onClick={() => void startLevelEdit(level.id)}
-                      >
-                        {loadingLevelID === level.id ? 'Cargando' : 'Editar'}
-                      </Button>
-                      {!level.is_published && <Button size="sm" onClick={() => void publishLevel(level.id)}>Publicar</Button>}
-                      {level.is_published && <Button size="sm" variant="outline" onClick={() => void unpublishLevel(level.id)}>Ocultar</Button>}
-                      <Button size="sm" variant="outline" onClick={() => void archiveLevel(level.id)}>Archivar</Button>
-                    </div>
-                  </div>
-                ))}
-                {levels.length === 0 && <p className="py-4 text-sm text-[--color-muted]">No hay niveles.</p>}
-              </div>
-            </section>
-          </>
+                );
+              })}
+              {sections.length === 0 && <p className="py-4 text-sm text-[--color-muted]">No hay secciones.</p>}
+            </div>
+          </section>
         )}
       </div>
     </main>

@@ -109,6 +109,7 @@ func main() {
 		TokenCfg:       tokenCfg,
 		Queries:        queries,
 		AllowedOrigin:  allowedOrigin,
+		MaxBodyBytes:   int64(getInt32Env("API_MAX_BODY_BYTES", 6*1024*1024)),
 	})
 
 	// ── TLS 1.2+ (RF69 — TLS 1.0/1.1 explicitly disabled) ────────────────────

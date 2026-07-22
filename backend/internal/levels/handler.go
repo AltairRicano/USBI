@@ -29,7 +29,7 @@ func (h *Handler) CreateLevel(w http.ResponseWriter, r *http.Request) {
 
 	var req CreateLevelRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeProblem(w, r, http.StatusBadRequest, "bad-request", "Bad Request", "Invalid JSON body")
+		writeDecodeProblem(w, r, err)
 		return
 	}
 
@@ -121,7 +121,7 @@ func (h *Handler) UpdateLevel(w http.ResponseWriter, r *http.Request) {
 
 	var req UpdateLevelRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeProblem(w, r, http.StatusBadRequest, "bad-request", "Bad Request", "Invalid JSON body")
+		writeDecodeProblem(w, r, err)
 		return
 	}
 
@@ -207,7 +207,7 @@ func (h *Handler) CompleteLevel(w http.ResponseWriter, r *http.Request) {
 
 	var req CompleteLevelRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeProblem(w, r, http.StatusBadRequest, "bad-request", "Bad Request", "Invalid JSON body")
+		writeDecodeProblem(w, r, err)
 		return
 	}
 
@@ -243,7 +243,7 @@ func (h *Handler) CreateSection(w http.ResponseWriter, r *http.Request) {
 
 	var req CreateSectionRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeProblem(w, r, http.StatusBadRequest, "bad-request", "Bad Request", "Invalid JSON body")
+		writeDecodeProblem(w, r, err)
 		return
 	}
 
@@ -282,7 +282,7 @@ func (h *Handler) UpdateSection(w http.ResponseWriter, r *http.Request) {
 
 	var req UpdateSectionRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeProblem(w, r, http.StatusBadRequest, "bad-request", "Bad Request", "Invalid JSON body")
+		writeDecodeProblem(w, r, err)
 		return
 	}
 
@@ -361,6 +361,17 @@ func parseURLUUID(w http.ResponseWriter, r *http.Request, key string) (uuid.UUID
 		return uuid.Nil, false
 	}
 	return parsed, true
+}
+
+func writeDecodeProblem(w http.ResponseWriter, r *http.Request, err error) {
+	var maxBytesErr *http.MaxBytesError
+	if errors.As(err, &maxBytesErr) {
+		writeProblem(w, r, http.StatusRequestEntityTooLarge, "payload-too-large",
+			"Payload Too Large", "Request body exceeds the configured size limit")
+		return
+	}
+
+	writeProblem(w, r, http.StatusBadRequest, "bad-request", "Bad Request", "Invalid JSON body")
 }
 
 func writeServiceError(w http.ResponseWriter, r *http.Request, err error, fallback string) {

@@ -26,8 +26,7 @@ func NewHandler(svc *Service) *Handler {
 func (h *Handler) Register(w http.ResponseWriter, r *http.Request) {
 	var req RegisterRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeProblem(w, r, http.StatusBadRequest, "bad-request",
-			"Bad Request", "Invalid JSON body")
+		writeDecodeProblem(w, r, err)
 		return
 	}
 
@@ -57,8 +56,7 @@ func (h *Handler) Register(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 	var req LoginRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeProblem(w, r, http.StatusBadRequest, "bad-request",
-			"Bad Request", "Invalid JSON body")
+		writeDecodeProblem(w, r, err)
 		return
 	}
 
@@ -95,8 +93,7 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) Refresh(w http.ResponseWriter, r *http.Request) {
 	var req RefreshRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeProblem(w, r, http.StatusBadRequest, "bad-request",
-			"Bad Request", "Invalid JSON body")
+		writeDecodeProblem(w, r, err)
 		return
 	}
 
@@ -125,8 +122,7 @@ func (h *Handler) Refresh(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) TutorConsent(w http.ResponseWriter, r *http.Request) {
 	var req TutorConsentRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeProblem(w, r, http.StatusBadRequest, "bad-request",
-			"Bad Request", "Invalid JSON body")
+		writeDecodeProblem(w, r, err)
 		return
 	}
 
@@ -204,8 +200,7 @@ func (h *Handler) Arco(w http.ResponseWriter, r *http.Request) {
 
 	var req ArcoRequestDTO
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeProblem(w, r, http.StatusBadRequest, "bad-request",
-			"Bad Request", "Invalid JSON body")
+		writeDecodeProblem(w, r, err)
 		return
 	}
 
@@ -274,7 +269,7 @@ func (h *Handler) ResolveArco(w http.ResponseWriter, r *http.Request) {
 
 	var req ResolveArcoRequestDTO
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeProblem(w, r, http.StatusBadRequest, "bad-request", "Bad Request", "Invalid JSON body")
+		writeDecodeProblem(w, r, err)
 		return
 	}
 
@@ -294,6 +289,18 @@ func (h *Handler) ResolveArco(w http.ResponseWriter, r *http.Request) {
 }
 
 // ── Internal helpers ──────────────────────────────────────────────────────────
+
+func writeDecodeProblem(w http.ResponseWriter, r *http.Request, err error) {
+	var maxBytesErr *http.MaxBytesError
+	if errors.As(err, &maxBytesErr) {
+		writeProblem(w, r, http.StatusRequestEntityTooLarge, "payload-too-large",
+			"Payload Too Large", "Request body exceeds the configured size limit")
+		return
+	}
+
+	writeProblem(w, r, http.StatusBadRequest, "bad-request",
+		"Bad Request", "Invalid JSON body")
+}
 
 // writeProblem emits an RFC 7807 application/problem+json response.
 // errorSlug becomes the suffix of the type URI.

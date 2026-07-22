@@ -404,6 +404,15 @@ func (s *Service) ArchiveSection(ctx context.Context, adminID, sectionID uuid.UU
 		}
 		return SectionResponse{}, err
 	}
+
+	err = qtx.ArchiveLevelsBySection(ctx, repository.ArchiveLevelsBySectionParams{
+		SectionID: sectionID,
+		DeletedBy: uuid.NullUUID{UUID: adminID, Valid: true},
+	})
+	if err != nil {
+		return SectionResponse{}, err
+	}
+
 	resp := sectionToResponse(section)
 	if err := logAdminAudit(ctx, qtx, adminID, "section.archive", "section", section.ID, nil, resp); err != nil {
 		return SectionResponse{}, err

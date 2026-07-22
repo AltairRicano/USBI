@@ -278,6 +278,20 @@ RETURNING id, section_id, title, color, template_type, content, difficulty, is_p
 	return scanLevel(row)
 }
 
+type ArchiveLevelsBySectionParams struct {
+	SectionID uuid.UUID
+	DeletedBy uuid.NullUUID
+}
+
+func (q *Queries) ArchiveLevelsBySection(ctx context.Context, arg ArchiveLevelsBySectionParams) error {
+	_, err := q.db.ExecContext(ctx, `
+UPDATE levels
+SET deleted_at = NOW(), deleted_by = $2, is_published = false, updated_at = NOW()
+WHERE section_id = $1 AND deleted_at IS NULL
+`, arg.SectionID, arg.DeletedBy)
+	return err
+}
+
 type LockLevelAttemptParams struct {
 	UserID      uuid.UUID
 	LevelID     uuid.UUID

@@ -32,6 +32,21 @@ a servidor.
 La fuente de verdad del esquema es `backend/migrations/`; `backend/sqlc.yaml`
 genera repositorios a partir de esas migraciones y `backend/sql/query.sql`.
 
+### Despliegue en servidor final
+
+El servidor institucional previsto es de 1 vCPU / 1 GB RAM / 20 GB y aloja
+PostgreSQL en el mismo equipo. Para conservar memoria y disco, el servidor final
+debe recibir artefactos ya construidos:
+
+- binario Go del backend;
+- directorio estático `frontend/dist`;
+- migraciones SQL y archivos de entorno del servidor.
+
+No ejecutes `pnpm install`, `pnpm build`, `cargo build`, `pnpm tauri` ni builds
+de Vite/Tauri en producción. Esas tareas deben correr en la máquina de desarrollo
+o CI, y el servidor sólo debe ejecutar el binario Go, Nginx y PostgreSQL/PgBouncer
+si se habilita.
+
 Healthchecks:
 
 - `/health/live`: liveness del proceso.

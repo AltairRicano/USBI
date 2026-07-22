@@ -107,6 +107,11 @@ html.dark {
   a:hover {
     color: var(--color-primary-hover);
   }
+
+  button a {
+    color: inherit;
+    text-decoration: inherit;
+  }
 }
 
 /* ── Filtros de accesibilidad daltónica (RNF16) ─────────────

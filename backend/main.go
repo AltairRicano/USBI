@@ -52,9 +52,15 @@ func main() {
 	}
 	defer db.Close()
 
-	db.SetMaxOpenConns(10)
-	db.SetMaxIdleConns(2)
-	db.SetConnMaxLifetime(30 * time.Minute)
+	dbMaxOpenConns := int(getInt32Env("DB_MAX_OPEN_CONNS", 10))
+	dbMaxIdleConns := int(getInt32Env("DB_MAX_IDLE_CONNS", 2))
+	if dbMaxIdleConns > dbMaxOpenConns {
+		log.Fatalf("[FATAL] DB_MAX_IDLE_CONNS (%d) cannot exceed DB_MAX_OPEN_CONNS (%d)", dbMaxIdleConns, dbMaxOpenConns)
+	}
+	db.SetMaxOpenConns(dbMaxOpenConns)
+	db.SetMaxIdleConns(dbMaxIdleConns)
+	db.SetConnMaxLifetime(getDurationEnv("DB_CONN_MAX_LIFETIME", 30*time.Minute))
+	db.SetConnMaxIdleTime(getDurationEnv("DB_CONN_MAX_IDLE_TIME", 5*time.Minute))
 
 	if err := db.Ping(); err != nil {
 		log.Fatalf("[FATAL] Database unreachable: %v", err)

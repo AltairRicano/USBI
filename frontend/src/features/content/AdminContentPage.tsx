@@ -132,6 +132,7 @@ export function AdminContentPage() {
       await loadContent();
     } catch (err: any) {
       setError(errorMessage(err, 'No se pudo guardar el nivel.'));
+      throw err;
     }
   }
 

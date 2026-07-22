@@ -16,7 +16,6 @@ interface WordSearchGameProps {
 
 export function WordSearchGame({ words, width = 10, height = 10, seed = 1234, onFinish }: WordSearchGameProps) {
   const phaserRef = useRef<IRefPhaserGame | null>(null);
-  const [state, setState] = useState<WordSearchState | null>(null);
 
   const engine = useMemo(() => new WordSearchEngine(words, width, height, seed), [words, width, height, seed]);
   const [state, setState] = useState<WordSearchState>(() => engine.getState());

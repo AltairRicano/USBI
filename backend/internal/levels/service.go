@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
 	"net/url"
 	"strings"
 	"time"
@@ -616,18 +617,23 @@ func CalculateXP(difficulty int32, attemptNumber int32, completed bool) int32 {
 
 func validateLevelInput(title, color string, sectionID uuid.UUID, templateType string, difficulty int32, content json.RawMessage) error {
 	if strings.TrimSpace(title) == "" || strings.TrimSpace(color) == "" || sectionID == uuid.Nil || templateType == "" {
+		log.Printf("validateLevelInput failed: basic empty fields")
 		return ErrValidation
 	}
 	if difficulty < 1 || difficulty > 10 {
+		log.Printf("validateLevelInput failed: difficulty out of bounds")
 		return ErrValidation
 	}
 	if _, ok := AllowedTemplateTypes[templateType]; !ok {
+		log.Printf("validateLevelInput failed: unknown template type %s", templateType)
 		return ErrValidation
 	}
 	if len(content) == 0 || len(content) > 5*1024*1024 || !json.Valid(content) {
+		log.Printf("validateLevelInput failed: content size or invalid JSON")
 		return ErrValidation
 	}
 	if string(content) == "[]" || string(content) == "{}" || string(content) == "null" {
+		log.Printf("validateLevelInput failed: empty content")
 		return ErrValidation
 	}
 	switch templateType {
@@ -765,10 +771,16 @@ func validatePuzzleContent(content json.RawMessage) error {
 		GridSize *int32 `json:"gridSize,omitempty"`
 		Seed     *int32 `json:"seed,omitempty"`
 	}
-	if err := json.Unmarshal(content, &payload); err != nil || !isHTTPURL(payload.ImageURL) {
+	if err := json.Unmarshal(content, &payload); err != nil {
+		log.Printf("validatePuzzleContent unmarshal error: %v, content: %s", err, string(content))
+		return ErrValidation
+	}
+	if !isHTTPURL(payload.ImageURL) {
+		log.Printf("validatePuzzleContent invalid URL: %s", payload.ImageURL)
 		return ErrValidation
 	}
 	if payload.GridSize != nil && (*payload.GridSize < 2 || *payload.GridSize > 10) {
+		log.Printf("validatePuzzleContent grid size out of bounds: %v", *payload.GridSize)
 		return ErrValidation
 	}
 	return nil

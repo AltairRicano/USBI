@@ -62,6 +62,7 @@ function LevelMakerFormInner({ initialData, sections, onSave, onCancel }: LevelM
   
   const [content, setContent] = useState<any>(() => resolveContent(initialData, registryEntry));
   const [errors, setErrors] = useState<any>(null);
+  const [submitError, setSubmitError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [showPreview, setShowPreview] = useState(false);
 
@@ -113,6 +114,7 @@ function LevelMakerFormInner({ initialData, sections, onSave, onCancel }: LevelM
   const handleSave = async () => {
     if (errors || !title || !sectionId) return;
     setLoading(true);
+    setSubmitError(null);
     try {
       await onSave({
         section_id: sectionId,
@@ -122,6 +124,9 @@ function LevelMakerFormInner({ initialData, sections, onSave, onCancel }: LevelM
         template_type: templateType,
         content
       });
+    } catch (e: any) {
+      console.error(e);
+      setSubmitError(e.response?.data?.detail || e.message || 'Error al guardar');
     } finally {
       setLoading(false);
     }
@@ -164,6 +169,11 @@ function LevelMakerFormInner({ initialData, sections, onSave, onCancel }: LevelM
       {errors && (
         <div className="mt-4 p-3 bg-red-50 text-red-600 rounded text-sm overflow-auto max-h-32">
           La configuración contiene errores y no puede guardarse. Revisa los campos.
+        </div>
+      )}
+      {submitError && (
+        <div className="mt-4 p-3 bg-red-500 text-white rounded text-sm overflow-auto max-h-32">
+          Error del servidor: {submitError}
         </div>
       )}
 

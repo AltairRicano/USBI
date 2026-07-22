@@ -83,11 +83,43 @@ export const SnakeLadderGame: React.FC<SnakeLadderGameProps> = ({ level, onCompl
      }
   }, [phaserRef, engine, onComplete]);
 
-  const rollDice = () => {
-     if (phaserRef.current?.scene && canRoll) {
-         setCanRoll(false);
-         phaserRef.current.scene.events.emit('ROLL_DICE');
-     }
+  const [currentQuestion, setCurrentQuestion] = useState<any>(null);
+  const [showQuestionModal, setShowQuestionModal] = useState(false);
+
+  const handleRollClick = () => {
+      const questions = (level as any).questions || [];
+      if (questions.length > 0) {
+          const q = questions[Math.floor(Math.random() * questions.length)];
+          setCurrentQuestion(q);
+          setShowQuestionModal(true);
+      } else {
+          executeRoll();
+      }
+  };
+
+  const executeRoll = () => {
+      if (phaserRef.current?.scene && canRoll) {
+          setCanRoll(false);
+          phaserRef.current.scene.events.emit('ROLL_DICE');
+      }
+  };
+
+  const handleAnswer = (index: number) => {
+      setShowQuestionModal(false);
+      if (index === currentQuestion.correct_index) {
+          executeRoll();
+      } else {
+          setCanRoll(false);
+          engine.state.message = "¡Respuesta incorrecta! Pierdes el turno.";
+          engine.state.state = 'ai_turn';
+          if (phaserRef.current?.scene) {
+              const snakeScene = phaserRef.current.scene as any;
+              if (snakeScene.messageText) {
+                  snakeScene.messageText.setText(engine.state.message);
+              }
+              snakeScene.events.emit('AI_PLAY');
+          }
+      }
   };
 
   return (
@@ -105,7 +137,7 @@ export const SnakeLadderGame: React.FC<SnakeLadderGameProps> = ({ level, onCompl
                      />
                  </div>
                  <button 
-                     onClick={rollDice}
+                     onClick={handleRollClick}
                      disabled={!canRoll}
                      className="px-8 py-3 bg-blue-600 text-white rounded-full font-bold shadow-md disabled:bg-slate-400 active:scale-95 transition-transform"
                  >
@@ -116,6 +148,26 @@ export const SnakeLadderGame: React.FC<SnakeLadderGameProps> = ({ level, onCompl
              <div className="flex flex-col items-center justify-center p-8 text-center text-white bg-slate-800 rounded-xl">
                  <h2 className="text-3xl font-bold mb-4">Juego Terminado</h2>
                  <p className="text-xl">Ganador: {winner === 'player' ? '¡Tú!' : 'La Inteligencia Artificial'}</p>
+             </div>
+         )}
+         
+         {showQuestionModal && currentQuestion && (
+             <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+                 <div className="bg-white p-6 rounded-xl shadow-xl max-w-md w-full">
+                     <h3 className="text-xl font-bold mb-4">Para tirar el dado, responde:</h3>
+                     <p className="text-lg mb-6">{currentQuestion.question}</p>
+                     <div className="flex flex-col gap-3">
+                         {currentQuestion.options.map((opt: string, idx: number) => (
+                             <button
+                                 key={idx}
+                                 onClick={() => handleAnswer(idx)}
+                                 className="px-4 py-3 text-left border rounded-lg hover:bg-blue-50 hover:border-blue-300 transition-colors"
+                             >
+                                 {opt}
+                             </button>
+                         ))}
+                     </div>
+                 </div>
              </div>
          )}
       </div>

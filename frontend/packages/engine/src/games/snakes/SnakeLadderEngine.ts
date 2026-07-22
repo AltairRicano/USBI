@@ -45,7 +45,7 @@ export class SnakeLadderEngine {
   public start() {
     if (this.state.state !== 'idle') throw new Error("Can only start from idle");
     this.state.state = 'player_turn';
-    this.state.message = "Game started. Your turn!";
+    this.state.message = "¡Juego iniciado. Tu turno!";
   }
 
   public rollPlayer() {
@@ -77,14 +77,14 @@ export class SnakeLadderEngine {
     const snake = this.config.snakes.find(s => s.start === position);
     if (snake) {
       finalPos = snake.end;
-      this.state.message = `${who} hit a snake!`;
+      this.state.message = `${who === 'player' ? '¡El jugador' : '¡La IA'} cayó en una serpiente!`;
     }
     
     // Check ladders
     const ladder = this.config.ladders.find(l => l.start === position);
     if (ladder) {
       finalPos = ladder.end;
-      this.state.message = `${who} found a ladder!`;
+      this.state.message = `${who === 'player' ? '¡El jugador' : '¡La IA'} encontró una escalera!`;
     }
     
     if (who === 'player') {
@@ -92,7 +92,7 @@ export class SnakeLadderEngine {
       if (finalPos === this.winPosition()) {
         this.state.state = 'game_over';
         this.state.winner = 'player';
-        this.state.message = "Player wins!";
+        this.state.message = "¡El jugador gana!";
       } else {
         this.state.state = 'ai_turn';
         this.state.message = "AI's turn";
@@ -102,7 +102,7 @@ export class SnakeLadderEngine {
       if (finalPos === this.winPosition()) {
         this.state.state = 'game_over';
         this.state.winner = 'ai';
-        this.state.message = "AI wins!";
+        this.state.message = "¡La IA gana!";
       } else {
         this.state.state = 'player_turn';
         this.state.message = "Player's turn";

@@ -200,6 +200,7 @@ export function normalizeSnakesContent(content: unknown): Snakes | null {
     snakes: Array.isArray(data.snakes) ? data.snakes : [],
     ladders: Array.isArray(data.ladders) ? data.ladders : [],
     ai_config: data.ai_config,
+    questions: Array.isArray(data.questions) ? data.questions : [],
   };
 }
 

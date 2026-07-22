@@ -17,7 +17,12 @@ export const SnakesSchema = z.object({
     difficulty: z.enum(["EASY", "MEDIUM", "HARD"]),
     fail_probability: z.number().min(0).max(1).optional(),
     weights: z.array(z.number().min(0)).optional()
-  }).optional()
+  }).optional(),
+  questions: z.array(z.object({
+    question: z.string().min(1),
+    options: z.array(z.string()).min(2),
+    correct_index: z.number().int().min(0)
+  })).optional(),
 }).superRefine((data, ctx) => {
   const total_cells = data.board_width * data.board_height;
   if (data.end_position > total_cells) {

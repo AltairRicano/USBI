@@ -121,14 +121,18 @@ export function AdminContentPage() {
   }
 
   async function handleMakerSave(data: any) {
-    if (makerInitialData) {
-      await apiClient.patch(`/levels/${makerInitialData.id}`, data);
-    } else {
-      await apiClient.post('/levels', data);
+    try {
+      if (makerInitialData) {
+        await apiClient.patch(`/levels/${makerInitialData.id}`, data);
+      } else {
+        await apiClient.post('/levels', data);
+      }
+      setShowMaker(false);
+      setMakerInitialData(null);
+      await loadContent();
+    } catch (err: any) {
+      setError(errorMessage(err, 'No se pudo guardar el nivel.'));
     }
-    setShowMaker(false);
-    setMakerInitialData(null);
-    await loadContent();
   }
 
   async function publishSection(id: string) { await apiClient.post(`/sections/${id}/publish`); await loadContent(); }

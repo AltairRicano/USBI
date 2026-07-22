@@ -15,7 +15,6 @@ interface PuzzleGameProps {
 
 export function PuzzleGame({ imageUrl, gridSize = 3, seed = 1234, onFinish }: PuzzleGameProps) {
   const phaserRef = useRef<IRefPhaserGame | null>(null);
-  const [state, setState] = useState<PuzzleState | null>(null);
 
   const engine = useMemo(() => new PuzzleEngine(gridSize, seed), [gridSize, seed]);
   const [state, setState] = useState<PuzzleState>(() => engine.getState());

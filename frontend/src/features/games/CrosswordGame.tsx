@@ -14,9 +14,9 @@ interface CrosswordGameProps {
 
 export function CrosswordGame({ words, onFinish }: CrosswordGameProps) {
   const phaserRef = useRef<IRefPhaserGame | null>(null);
-  const [state, setState] = useState<CrosswordState | null>(null);
 
   const engine = useMemo(() => new CrosswordEngine(words), [words]);
+  const placedWords = useMemo(() => engine.getPlacedWords(), [engine]);
   const [state, setState] = useState<CrosswordState>(() => engine.getState());
 
 

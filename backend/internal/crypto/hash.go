@@ -14,11 +14,12 @@ import (
 )
 
 // Argon2id parameters — aligned with OWASP 2023 minimum for interactive logins.
-// memory=64MB, time=3, threads=2.
+// memory=64MB, time=3, threads=1. The production server has 1 vCPU, so using
+// a single Argon2 lane avoids oversubscribing CPU during auth bursts.
 const (
 	argon2Memory      uint32 = 64 * 1024
 	argon2Iterations  uint32 = 3
-	argon2Parallelism uint8  = 2
+	argon2Parallelism uint8  = 1
 	argon2SaltLength  int    = 16
 	argon2KeyLength   uint32 = 32
 )

@@ -31,13 +31,37 @@ import { PuzzlePreview } from './previews/PuzzlePreview';
 import { FakeNewsPreview } from './previews/FakeNewsPreview';
 import { MemoryPreview } from './previews/MemoryPreview';
 import { SnakeLadderPreview } from './previews/SnakeLadderPreview';
+import { generateSnakeLadderLinks } from './snakesLayout';
+
+const triviaDefaults = () => [
+  { question: '', options: ['', ''], correct_index: 0 },
+  { question: '', options: ['', ''], correct_index: 0 },
+  { question: '', options: ['', ''], correct_index: 0 },
+];
+
+const snakeLadderDefaults = () => {
+  const boardWidth = 6;
+  const boardHeight = 6;
+  const seed = 2026;
+  const links = generateSnakeLadderLinks({ boardWidth, boardHeight, snakeCount: 3, ladderCount: 3, seed });
+  return {
+    board_width: boardWidth,
+    board_height: boardHeight,
+    start_position: 1,
+    end_position: boardWidth * boardHeight,
+    seed,
+    snakes: links.snakes,
+    ladders: links.ladders,
+    ai_config: { difficulty: 'MEDIUM' },
+  };
+};
 
 export const levelTemplateRegistry = {
   trivia: {
-    schema: z.array(LocalMultipleChoiceSchema).min(1) as any,
+    schema: z.array(LocalMultipleChoiceSchema).min(3) as any,
     FormComponent: TriviaForm as any,
     PreviewComponent: TriviaPreview,
-    getDefaults: () => [{ question: '', options: ['', ''], correct_index: 0 }],
+    getDefaults: triviaDefaults,
   },
   crossword: {
     schema: CrosswordSchema as any,
@@ -78,6 +102,6 @@ export const levelTemplateRegistry = {
     schema: SnakesSchema as any,
     FormComponent: SnakeLadderForm as any,
     PreviewComponent: SnakeLadderPreview,
-    getDefaults: () => ({ board_width: 6, board_height: 6, start_position: 1, end_position: 36, snakes: [], ladders: [], ai_config: { difficulty: 'MEDIUM' } }),
+    getDefaults: snakeLadderDefaults,
   }
 } as const;

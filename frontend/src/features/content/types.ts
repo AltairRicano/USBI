@@ -196,6 +196,7 @@ export function normalizeSnakesContent(content: unknown): Snakes | null {
     board_height: data.board_height,
     start_position: data.start_position,
     end_position: data.end_position,
+    seed: typeof data.seed === 'number' ? data.seed : undefined,
     snakes: Array.isArray(data.snakes) ? data.snakes : [],
     ladders: Array.isArray(data.ladders) ? data.ladders : [],
     ai_config: data.ai_config,

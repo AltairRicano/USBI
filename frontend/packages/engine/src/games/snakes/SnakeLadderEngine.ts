@@ -13,6 +13,10 @@ export interface SnakeLadderState {
 
 export interface SnakeLadderConfig {
   boardSize: number;
+  boardWidth?: number;
+  boardHeight?: number;
+  startPosition?: number;
+  endPosition?: number;
   snakes: {start: number, end: number}[];
   ladders: {start: number, end: number}[];
   aiDifficulty: 'EASY' | 'MEDIUM' | 'HARD';
@@ -27,10 +31,11 @@ export class SnakeLadderEngine {
   constructor(config: SnakeLadderConfig) {
     this.config = config;
     this.random = config.randomFn || Math.random;
+    const startPosition = config.startPosition ?? 1;
     this.state = {
       state: 'idle',
-      playerPosition: 1,
-      aiPosition: 1,
+      playerPosition: startPosition,
+      aiPosition: startPosition,
       winner: null,
       lastRoll: 0,
       message: ''
@@ -54,9 +59,10 @@ export class SnakeLadderEngine {
     let target = this.state.playerPosition + roll;
     
     // Exceeding last cell: bounce back logic
-    if (target > this.config.boardSize) {
-      const excess = target - this.config.boardSize;
-      target = this.config.boardSize - excess;
+    const endPosition = this.winPosition();
+    if (target > endPosition) {
+      const excess = target - endPosition;
+      target = endPosition - excess;
     }
     
     this.state.playerPosition = target;
@@ -83,7 +89,7 @@ export class SnakeLadderEngine {
     
     if (who === 'player') {
       this.state.playerPosition = finalPos;
-      if (finalPos === this.config.boardSize) {
+      if (finalPos === this.winPosition()) {
         this.state.state = 'game_over';
         this.state.winner = 'player';
         this.state.message = "Player wins!";
@@ -93,7 +99,7 @@ export class SnakeLadderEngine {
       }
     } else {
       this.state.aiPosition = finalPos;
-      if (finalPos === this.config.boardSize) {
+      if (finalPos === this.winPosition()) {
         this.state.state = 'game_over';
         this.state.winner = 'ai';
         this.state.message = "AI wins!";
@@ -109,7 +115,8 @@ export class SnakeLadderEngine {
     this.state.state = 'ai_thinking';
     
     // Probabilistic logic for AI using weightedRandom
-    const remaining = this.config.boardSize - this.state.aiPosition;
+    const endPosition = this.winPosition();
+    const remaining = endPosition - this.state.aiPosition;
     
     // By default, fair roll
     let failProbability = 0;
@@ -134,13 +141,17 @@ export class SnakeLadderEngine {
     this.state.state = 'ai_moving';
     let target = this.state.aiPosition + roll;
     
-    if (target > this.config.boardSize) {
-      const excess = target - this.config.boardSize;
-      target = this.config.boardSize - excess;
+    if (target > endPosition) {
+      const excess = target - endPosition;
+      target = endPosition - excess;
     }
     
     this.state.aiPosition = target;
     this.state.state = 'resolving_ai_tile';
     this.resolveTile('ai', target);
+  }
+
+  private winPosition(): number {
+    return this.config.endPosition ?? this.config.boardSize;
   }
 }

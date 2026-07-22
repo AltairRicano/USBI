@@ -10,6 +10,7 @@ export const SnakesSchema = z.object({
   board_height: z.number().int().min(1),
   start_position: z.number().int().min(1),
   end_position: z.number().int().min(1),
+  seed: z.number().int().optional(),
   snakes: z.array(SnakeLadderItemSchema).optional(),
   ladders: z.array(SnakeLadderItemSchema).optional(),
   ai_config: z.object({

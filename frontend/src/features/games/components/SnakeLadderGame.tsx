@@ -16,12 +16,16 @@ export const SnakeLadderGame: React.FC<SnakeLadderGameProps> = ({ level, onCompl
   
   const engineConfig = useMemo<SnakeLadderConfig>(() => ({
       boardSize: level.board_width * level.board_height,
+      boardWidth: level.board_width,
+      boardHeight: level.board_height,
+      startPosition: level.start_position,
+      endPosition: level.end_position,
       snakes: level.snakes || [],
       ladders: level.ladders || [],
       aiDifficulty: level.ai_config?.difficulty || 'MEDIUM'
   }), [level]);
 
-  const [engine] = useState(() => new SnakeLadderEngine(engineConfig));
+  const engine = useMemo(() => new SnakeLadderEngine(engineConfig), [engineConfig]);
   const [isGameOver, setIsGameOver] = useState(false);
   const [canRoll, setCanRoll] = useState(false);
   const [winner, setWinner] = useState<string | null>(null);
@@ -37,9 +41,13 @@ export const SnakeLadderGame: React.FC<SnakeLadderGameProps> = ({ level, onCompl
 
   const gameConfig: Phaser.Types.Core.GameConfig = useMemo(() => ({
       type: Phaser.AUTO,
-      width: 600,
-      height: 600,
+      width: 720,
+      height: 780,
       backgroundColor: '#f8fafc',
+      scale: {
+          mode: Phaser.Scale.FIT,
+          autoCenter: Phaser.Scale.CENTER_BOTH,
+      },
       scene: [SnakeLadderScene],
       callbacks: {
           preBoot: (game) => {
@@ -83,11 +91,18 @@ export const SnakeLadderGame: React.FC<SnakeLadderGameProps> = ({ level, onCompl
   };
 
   return (
-      <div className="flex flex-col items-center justify-center p-4">
+      <div className="flex w-full flex-col items-center justify-center gap-4 px-2 py-4 sm:px-4">
          {!isGameOver ? (
              <>
-                 <div className="mb-4 rounded-xl shadow-lg overflow-hidden border-2 border-slate-300 relative w-[600px] h-[600px] bg-[--color-card]">
-                     <PhaserGame ref={phaserRef} config={gameConfig} />
+                 <div
+                     className="relative w-full overflow-hidden rounded-lg border border-[--color-border] bg-[--color-card] shadow-sm"
+                     style={{ maxWidth: 'min(92vw, 720px)', aspectRatio: '720 / 780' }}
+                 >
+                     <PhaserGame
+                         key={`${level.board_width}x${level.board_height}-${level.seed ?? 'random'}-${level.snakes?.length ?? 0}-${level.ladders?.length ?? 0}`}
+                         ref={phaserRef}
+                         config={gameConfig}
+                     />
                  </div>
                  <button 
                      onClick={rollDice}

@@ -1,16 +1,26 @@
 import * as Phaser from 'phaser';
 import { SnakeLadderEngine, SnakeLadderConfig, mapToGrid } from '@usbi/engine';
 
+interface BoardLayout {
+  cols: number;
+  rows: number;
+  cellSize: number;
+  offsetX: number;
+  offsetY: number;
+  boardWidth: number;
+  boardHeight: number;
+}
+
 export class SnakeLadderScene extends Phaser.Scene {
   private config!: SnakeLadderConfig;
   private engine!: SnakeLadderEngine;
-  private cellSize = 40;
   private playerToken!: Phaser.GameObjects.Arc;
   private aiToken!: Phaser.GameObjects.Arc;
   public isAnimating = false;
   private messageText!: Phaser.GameObjects.Text;
   private diceText!: Phaser.GameObjects.Text;
-  
+  private layout!: BoardLayout;
+
   constructor() {
     super('SnakeLadderScene');
   }
@@ -21,51 +31,11 @@ export class SnakeLadderScene extends Phaser.Scene {
   }
 
   create() {
-    const cols = Math.ceil(Math.sqrt(this.config.boardSize));
-    const rows = Math.ceil(this.config.boardSize / cols);
-    const offsetX = 50;
-    const offsetY = 50;
-
-    for (let i = 1; i <= this.config.boardSize; i++) {
-      const { x, y } = mapToGrid(i, cols, rows);
-      const cx = offsetX + x * this.cellSize;
-      const cy = offsetY + y * this.cellSize;
-
-      this.add.rectangle(cx, cy, this.cellSize, this.cellSize, 0xffffff)
-        .setStrokeStyle(1, 0x000000)
-        .setOrigin(0);
-      
-      this.add.text(cx + 2, cy + 2, `${i}`, { color: '#000000', fontSize: '12px' });
-    }
-
-    this.config.snakes.forEach((s: {start: number, end: number}) => {
-      const start = mapToGrid(s.start, cols, rows);
-      const end = mapToGrid(s.end, cols, rows);
-      const sx = offsetX + start.x * this.cellSize + this.cellSize / 2;
-      const sy = offsetY + start.y * this.cellSize + this.cellSize / 2;
-      const ex = offsetX + end.x * this.cellSize + this.cellSize / 2;
-      const ey = offsetY + end.y * this.cellSize + this.cellSize / 2;
-      
-      this.add.line(0, 0, sx, sy, ex, ey, 0xff0000).setOrigin(0).setLineWidth(2);
-    });
-
-    this.config.ladders.forEach((l: {start: number, end: number}) => {
-      const start = mapToGrid(l.start, cols, rows);
-      const end = mapToGrid(l.end, cols, rows);
-      const sx = offsetX + start.x * this.cellSize + this.cellSize / 2;
-      const sy = offsetY + start.y * this.cellSize + this.cellSize / 2;
-      const ex = offsetX + end.x * this.cellSize + this.cellSize / 2;
-      const ey = offsetY + end.y * this.cellSize + this.cellSize / 2;
-      
-      this.add.line(0, 0, sx, sy, ex, ey, 0x00ff00).setOrigin(0).setLineWidth(2);
-    });
-
-    const pStart = mapToGrid(1, cols, rows);
-    this.playerToken = this.add.circle(offsetX + pStart.x * this.cellSize + 10, offsetY + pStart.y * this.cellSize + 20, 8, 0x0000ff);
-    this.aiToken = this.add.circle(offsetX + pStart.x * this.cellSize + 30, offsetY + pStart.y * this.cellSize + 20, 8, 0xff00ff);
-
-    this.messageText = this.add.text(10, 10, this.engine.state.message, { color: '#000000', fontSize: '16px' });
-    this.diceText = this.add.text(10, 30, '', { color: '#000000', fontSize: '16px' });
+    this.layout = this.calculateLayout();
+    this.drawHud();
+    this.drawBoard();
+    this.drawLinks();
+    this.drawTokens();
 
     this.events.on('ROLL_DICE', () => {
       if (this.engine.state.state === 'player_turn' && !this.isAnimating) {
@@ -79,96 +49,221 @@ export class SnakeLadderScene extends Phaser.Scene {
 
   updateState(who: 'player' | 'ai', startPos: number, endPos: number) {
     this.messageText.setText(this.engine.state.message);
-    this.diceText.setText(`Last Roll: ${this.engine.state.lastRoll}`);
-    
+    this.diceText.setText(`Tiro: ${this.engine.state.lastRoll}`);
+
     const token = who === 'player' ? this.playerToken : this.aiToken;
 
     this.animateToken(token, startPos, endPos, () => {
-        if (who === 'player' && this.engine.state.state === 'ai_turn') {
-            this.time.delayedCall(500, () => {
-                if (!this.isAnimating) {
-                    const aiStartPos = this.engine.state.aiPosition;
-                    this.engine.playAITurn();
-                    const aiEndPos = this.engine.state.aiPosition;
-                    this.updateState('ai', aiStartPos, aiEndPos);
-                }
-            });
-        } else if (this.engine.state.state === 'game_over') {
-            this.events.emit('GAME_OVER', { winner: this.engine.state.winner });
-        }
+      if (who === 'player' && this.engine.state.state === 'ai_turn') {
+        this.time.delayedCall(500, () => {
+          if (!this.isAnimating) {
+            const aiStartPos = this.engine.state.aiPosition;
+            this.engine.playAITurn();
+            const aiEndPos = this.engine.state.aiPosition;
+            this.updateState('ai', aiStartPos, aiEndPos);
+          }
+        });
+      } else if (this.engine.state.state === 'game_over') {
+        this.events.emit('GAME_OVER', { winner: this.engine.state.winner });
+      }
     });
   }
 
   animateToken(token: Phaser.GameObjects.Arc, startPos: number, endPos: number, onComplete: () => void) {
     this.isAnimating = true;
-    const cols = Math.ceil(Math.sqrt(this.config.boardSize));
-    const rows = Math.ceil(this.config.boardSize / cols);
-    
-    const isPlayer = token === this.playerToken;
-    const offsetTokenX = isPlayer ? 10 : 30;
-    
+
     const roll = this.engine.state.lastRoll;
+    const winPosition = this.config.endPosition ?? this.config.boardSize;
     let intermediatePos = startPos + roll;
-    if (intermediatePos > this.config.boardSize) {
-        const excess = intermediatePos - this.config.boardSize;
-        intermediatePos = this.config.boardSize - excess;
+    if (intermediatePos > winPosition) {
+      const excess = intermediatePos - winPosition;
+      intermediatePos = winPosition - excess;
     }
 
-    const positions: {x: number, y: number}[] = [];
-    
-    // Step by step to intermediatePos
+    const isPlayer = token === this.playerToken;
+    const positions: { x: number; y: number }[] = [];
+
     if (intermediatePos > startPos) {
-       for(let i = startPos + 1; i <= intermediatePos; i++) {
-           const p = mapToGrid(i, cols, rows);
-           positions.push({ x: 50 + p.x * this.cellSize + offsetTokenX, y: 50 + p.y * this.cellSize + 20 });
-       }
+      for (let i = startPos + 1; i <= intermediatePos; i++) {
+        positions.push(this.tokenPoint(i, isPlayer));
+      }
     } else if (intermediatePos < startPos) {
-        // Bounce back logic
-        for(let i = startPos + 1; i <= this.config.boardSize; i++) {
-            const p = mapToGrid(i, cols, rows);
-            positions.push({ x: 50 + p.x * this.cellSize + offsetTokenX, y: 50 + p.y * this.cellSize + 20 });
-        }
-        for(let i = this.config.boardSize - 1; i >= intermediatePos; i--) {
-            const p = mapToGrid(i, cols, rows);
-            positions.push({ x: 50 + p.x * this.cellSize + offsetTokenX, y: 50 + p.y * this.cellSize + 20 });
-        }
+      for (let i = startPos + 1; i <= winPosition; i++) {
+        positions.push(this.tokenPoint(i, isPlayer));
+      }
+      for (let i = winPosition - 1; i >= intermediatePos; i--) {
+        positions.push(this.tokenPoint(i, isPlayer));
+      }
     } else {
-       // Should not happen as roll >= 1, but fallback
-       const p = mapToGrid(endPos, cols, rows);
-       positions.push({ x: 50 + p.x * this.cellSize + offsetTokenX, y: 50 + p.y * this.cellSize + 20 });
+      positions.push(this.tokenPoint(endPos, isPlayer));
     }
 
-    // After reaching intermediate, jump to endPos (snake or ladder)
     if (intermediatePos !== endPos) {
-        const p = mapToGrid(endPos, cols, rows);
-        positions.push({ x: 50 + p.x * this.cellSize + offsetTokenX, y: 50 + p.y * this.cellSize + 20 });
+      positions.push(this.tokenPoint(endPos, isPlayer));
     }
 
     if (positions.length === 0) {
-        this.isAnimating = false;
-        onComplete();
-        return;
+      this.isAnimating = false;
+      onComplete();
+      return;
     }
 
-    const tweenConfigs = positions.map((pos, idx) => {
+    this.tweens.chain({
+      tweens: positions.map((pos, idx) => {
         const isJump = idx === positions.length - 1 && intermediatePos !== endPos;
         return {
-            targets: token,
-            x: pos.x,
-            y: pos.y,
-            duration: isJump ? 500 : 200,
-            ease: isJump ? 'Sine.easeInOut' : 'Linear'
+          targets: token,
+          x: pos.x,
+          y: pos.y,
+          duration: isJump ? 520 : 180,
+          ease: isJump ? 'Sine.easeInOut' : 'Linear',
         };
+      }),
+      onComplete: () => {
+        this.isAnimating = false;
+        onComplete();
+      },
     });
+  }
 
-    this.tweens.chain({
-        tweens: tweenConfigs,
-        onComplete: () => {
-            this.isAnimating = false;
-            onComplete();
-        }
+  private calculateLayout(): BoardLayout {
+    const cols = this.config.boardWidth ?? Math.ceil(Math.sqrt(this.config.boardSize));
+    const rows = this.config.boardHeight ?? Math.ceil(this.config.boardSize / cols);
+    const width = this.scale.width;
+    const height = this.scale.height;
+    const hudHeight = 82;
+    const padding = 24;
+    const availableWidth = width - padding * 2;
+    const availableHeight = height - hudHeight - padding * 2;
+    const cellSize = Math.floor(Math.min(availableWidth / cols, availableHeight / rows));
+    const boardWidth = cellSize * cols;
+    const boardHeight = cellSize * rows;
+
+    return {
+      cols,
+      rows,
+      cellSize,
+      boardWidth,
+      boardHeight,
+      offsetX: Math.round((width - boardWidth) / 2),
+      offsetY: Math.round(hudHeight + (height - hudHeight - boardHeight) / 2),
+    };
+  }
+
+  private drawHud() {
+    this.add.rectangle(0, 0, this.scale.width, 74, 0xf8fafc).setOrigin(0);
+    this.messageText = this.add.text(20, 16, this.engine.state.message, {
+      color: '#0f172a',
+      fontSize: '22px',
+      fontStyle: 'bold',
     });
-    
+    this.diceText = this.add.text(20, 44, '', {
+      color: '#334155',
+      fontSize: '18px',
+    });
+  }
 
+  private drawBoard() {
+    const { cols, rows, cellSize, offsetX, offsetY } = this.layout;
+    const totalCells = cols * rows;
+    const startPosition = this.config.startPosition ?? 1;
+    const endPosition = this.config.endPosition ?? totalCells;
+
+    for (let i = 1; i <= totalCells; i++) {
+      const { x, y } = mapToGrid(i, cols, rows);
+      const cx = offsetX + x * cellSize;
+      const cy = offsetY + y * cellSize;
+      const isStart = i === startPosition;
+      const isEnd = i === endPosition;
+      const fill = isStart ? 0xdbeafe : isEnd ? 0xdcfce7 : 0xffffff;
+
+      this.add.rectangle(cx, cy, cellSize, cellSize, fill)
+        .setStrokeStyle(1, 0x334155)
+        .setOrigin(0);
+
+      this.add.text(cx + cellSize * 0.08, cy + cellSize * 0.08, `${i}`, {
+        color: '#0f172a',
+        fontSize: `${Math.max(12, Math.floor(cellSize * 0.22))}px`,
+        fontStyle: 'bold',
+      });
+
+      if (isStart || isEnd) {
+        this.add.text(cx + cellSize / 2, cy + cellSize * 0.65, isStart ? 'INICIO' : 'META', {
+          color: isStart ? '#1d4ed8' : '#15803d',
+          fontSize: `${Math.max(10, Math.floor(cellSize * 0.16))}px`,
+          fontStyle: 'bold',
+        }).setOrigin(0.5);
+      }
+    }
+  }
+
+  private drawLinks() {
+    const graphics = this.add.graphics();
+    this.config.ladders.forEach((ladder) => this.drawLadder(graphics, ladder.start, ladder.end));
+    this.config.snakes.forEach((snake) => this.drawSnake(graphics, snake.start, snake.end));
+  }
+
+  private drawSnake(graphics: Phaser.GameObjects.Graphics, start: number, end: number) {
+    const from = this.cellCenter(start);
+    const to = this.cellCenter(end);
+    const curve = new Phaser.Curves.QuadraticBezier(
+      new Phaser.Math.Vector2(from.x, from.y),
+      new Phaser.Math.Vector2((from.x + to.x) / 2 + this.layout.cellSize * 0.35, (from.y + to.y) / 2),
+      new Phaser.Math.Vector2(to.x, to.y),
+    );
+
+    graphics.lineStyle(Math.max(4, this.layout.cellSize * 0.08), 0xdc2626, 0.78);
+    curve.draw(graphics, 32);
+    graphics.fillStyle(0xdc2626, 0.95);
+    graphics.fillCircle(from.x, from.y, Math.max(5, this.layout.cellSize * 0.1));
+  }
+
+  private drawLadder(graphics: Phaser.GameObjects.Graphics, start: number, end: number) {
+    const from = this.cellCenter(start);
+    const to = this.cellCenter(end);
+    const dx = to.x - from.x;
+    const dy = to.y - from.y;
+    const length = Math.hypot(dx, dy) || 1;
+    const normalX = (-dy / length) * Math.max(5, this.layout.cellSize * 0.08);
+    const normalY = (dx / length) * Math.max(5, this.layout.cellSize * 0.08);
+
+    graphics.lineStyle(Math.max(3, this.layout.cellSize * 0.05), 0x16a34a, 0.9);
+    graphics.lineBetween(from.x + normalX, from.y + normalY, to.x + normalX, to.y + normalY);
+    graphics.lineBetween(from.x - normalX, from.y - normalY, to.x - normalX, to.y - normalY);
+
+    for (let i = 1; i <= 4; i++) {
+      const t = i / 5;
+      const rungX = from.x + dx * t;
+      const rungY = from.y + dy * t;
+      graphics.lineBetween(rungX + normalX, rungY + normalY, rungX - normalX, rungY - normalY);
+    }
+  }
+
+  private drawTokens() {
+    const playerPoint = this.tokenPoint(this.engine.state.playerPosition, true);
+    const aiPoint = this.tokenPoint(this.engine.state.aiPosition, false);
+    const radius = Math.max(7, Math.min(13, this.layout.cellSize * 0.16));
+    this.playerToken = this.add.circle(playerPoint.x, playerPoint.y, radius, 0x2563eb)
+      .setStrokeStyle(2, 0xffffff);
+    this.aiToken = this.add.circle(aiPoint.x, aiPoint.y, radius, 0xc026d3)
+      .setStrokeStyle(2, 0xffffff);
+  }
+
+  private cellCenter(position: number): { x: number; y: number } {
+    const safePosition = Phaser.Math.Clamp(position, 1, this.layout.cols * this.layout.rows);
+    const { x, y } = mapToGrid(safePosition, this.layout.cols, this.layout.rows);
+    return {
+      x: this.layout.offsetX + x * this.layout.cellSize + this.layout.cellSize / 2,
+      y: this.layout.offsetY + y * this.layout.cellSize + this.layout.cellSize / 2,
+    };
+  }
+
+  private tokenPoint(position: number, isPlayer: boolean): { x: number; y: number } {
+    const center = this.cellCenter(position);
+    const spread = Math.max(7, this.layout.cellSize * 0.16);
+    return {
+      x: center.x + (isPlayer ? -spread : spread),
+      y: center.y + spread * 0.35,
+    };
   }
 }

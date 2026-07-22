@@ -4,7 +4,7 @@ import { Button } from '../../../../components/ui/Button';
 export function PuzzleForm({ value, onChange }: { value: any, onChange: (val: any) => void, errors?: any }) {
   return (
     <div className="space-y-4">
-      <Input label="URL de la imagen" type="url" value={value.imageUrl || ''} onChange={(e: any) => onChange({...value, imageUrl: e.target.value})} required />
+      <Input label="URL de la imagen" type="url" value={value.imageUrl || ''} onChange={(e: any) => onChange({...value, imageUrl: e.target.value.trim()})} required />
       {value.imageUrl && (
         <div className="mt-2">
           <p className="text-sm text-gray-500">Vista previa:</p>

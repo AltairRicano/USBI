@@ -40,6 +40,9 @@ func (h *Handler) Register(w http.ResponseWriter, r *http.Request) {
 		case errors.Is(err, ErrEmailConflict):
 			writeProblem(w, r, http.StatusConflict, "conflict",
 				"Email Already Registered", "An active account with this email already exists")
+		case errors.Is(err, ErrAuthBusy):
+			writeProblem(w, r, http.StatusTooManyRequests, "auth-busy",
+				"Too Many Requests", "Authentication service is busy; retry shortly")
 		default:
 			writeProblem(w, r, http.StatusInternalServerError, "internal-error",
 				"Internal Server Error", "An unexpected error occurred")
@@ -75,6 +78,9 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 		case errors.Is(err, ErrPendingTutor):
 			writeProblem(w, r, http.StatusForbidden, "pending-tutor-consent",
 				"Tutor Consent Required", "Tutor consent is required before login")
+		case errors.Is(err, ErrAuthBusy):
+			writeProblem(w, r, http.StatusTooManyRequests, "auth-busy",
+				"Too Many Requests", "Authentication service is busy; retry shortly")
 		default:
 			println("[ERROR] Login failed: " + err.Error())
 			writeProblem(w, r, http.StatusInternalServerError, "internal-error",

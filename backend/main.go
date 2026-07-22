@@ -70,10 +70,11 @@ func main() {
 	}
 
 	authSvc := auth.NewService(queries, auth.Config{
-		EncryptionKey:    encryptionKey,
-		BlindIndexSecret: []byte(blindIndexSecret),
-		HMACSecret:       []byte(hmacSecret),
-		TokenConfig:      tokenCfg,
+		EncryptionKey:               encryptionKey,
+		BlindIndexSecret:            []byte(blindIndexSecret),
+		HMACSecret:                  []byte(hmacSecret),
+		TokenConfig:                 tokenCfg,
+		MaxConcurrentPasswordHashes: int(getInt32Env("MAX_CONCURRENT_PASSWORD_HASHES", 2)),
 	})
 
 	syncService := syncSvc.NewService(queries, []byte(hmacSecret))

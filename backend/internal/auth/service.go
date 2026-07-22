@@ -27,7 +27,10 @@ var (
 	ErrPendingTutor     = errors.New("pending tutor consent")
 	ErrInvalidRefresh   = errors.New("invalid refresh token")
 	ErrForbidden        = errors.New("forbidden")
+	ErrAuthBusy         = errors.New("authentication service is busy")
 )
+
+const defaultMaxConcurrentPasswordHashes = 2
 
 // Config holds all secrets and settings needed by auth.Service.
 // Every field is required; zero values indicate a misconfiguration.
@@ -42,12 +45,15 @@ type Config struct {
 	HMACSecret []byte
 	// TokenConfig carries the JWT signing key and expiry duration.
 	TokenConfig crypto.TokenConfig
+	// MaxConcurrentPasswordHashes caps concurrent Argon2 work. Defaults to 2.
+	MaxConcurrentPasswordHashes int
 }
 
 // Service implements the authentication business logic.
 type Service struct {
-	queries *repository.Queries
-	cfg     Config
+	queries           *repository.Queries
+	cfg               Config
+	passwordHashSlots chan struct{}
 }
 
 // NewService creates an auth.Service. It panics if cfg contains zero values
@@ -65,7 +71,15 @@ func NewService(q *repository.Queries, cfg Config) *Service {
 	if len(cfg.TokenConfig.Secret) == 0 {
 		panic("auth.Config: TokenConfig.Secret must not be empty")
 	}
-	return &Service{queries: q, cfg: cfg}
+	maxHashes := cfg.MaxConcurrentPasswordHashes
+	if maxHashes <= 0 {
+		maxHashes = defaultMaxConcurrentPasswordHashes
+	}
+	return &Service{
+		queries:           q,
+		cfg:               cfg,
+		passwordHashSlots: make(chan struct{}, maxHashes),
+	}
 }
 
 // Register creates a new user account with Argon2id password hash,
@@ -77,6 +91,12 @@ func (s *Service) Register(ctx context.Context, req RegisterRequest) (RegisterRe
 	}
 
 	// ── Password hashing (Argon2id) ───────────────────────────────────────────
+	releaseHashSlot, err := s.acquirePasswordHashSlot()
+	if err != nil {
+		return RegisterResponse{}, err
+	}
+	defer releaseHashSlot()
+
 	passwordHash, err := crypto.HashPassword(req.Password)
 	if err != nil {
 		return RegisterResponse{}, fmt.Errorf("hashing password: %w", err)
@@ -164,6 +184,12 @@ func (s *Service) Login(ctx context.Context, req LoginRequest) (LoginResponse, e
 	}
 
 	// Argon2id verification (constant-time).
+	releaseHashSlot, err := s.acquirePasswordHashSlot()
+	if err != nil {
+		return LoginResponse{}, err
+	}
+	defer releaseHashSlot()
+
 	ok, err := crypto.VerifyPassword(req.Password, user.PasswordHash)
 	if err != nil || !ok {
 		return LoginResponse{}, ErrInvalidPassword
@@ -196,6 +222,15 @@ func (s *Service) Login(ctx context.Context, req LoginRequest) (LoginResponse, e
 		RefreshTokenExpiresAt: refreshExpiresAt,
 		User:                  userDTO,
 	}, nil
+}
+
+func (s *Service) acquirePasswordHashSlot() (func(), error) {
+	select {
+	case s.passwordHashSlots <- struct{}{}:
+		return func() { <-s.passwordHashSlots }, nil
+	default:
+		return nil, ErrAuthBusy
+	}
 }
 
 func (s *Service) Refresh(ctx context.Context, req RefreshRequest) (LoginResponse, error) {

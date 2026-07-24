@@ -1,6 +1,7 @@
 export * from './interfaces/IGameState.js';
 export * from './games/FakeNewsEngine.js';
 export * from './games/MemoryEngine.js';
+export * from './games/memory/MemoryPalette.js';
 export * from './games/CrosswordEngine.js';
 export * from './games/snakes/BoardMap.js';
 export * from './games/snakes/SnakeLadderEngine.js';

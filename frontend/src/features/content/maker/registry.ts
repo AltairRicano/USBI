@@ -32,6 +32,7 @@ import { FakeNewsPreview } from './previews/FakeNewsPreview';
 import { MemoryPreview } from './previews/MemoryPreview';
 import { SnakeLadderPreview } from './previews/SnakeLadderPreview';
 import { generateSnakeLadderLinks } from './snakesLayout';
+import { createMemoryPairs } from '@usbi/engine';
 
 const triviaDefaults = () => [
   { question: '', options: ['', ''], correct_index: 0 },
@@ -91,12 +92,7 @@ export const levelTemplateRegistry = {
     schema: MemorySchema as any,
     FormComponent: MemoryForm as any,
     PreviewComponent: MemoryPreview,
-    getDefaults: () => ({ pairs: [
-      { id: crypto.randomUUID(), content1: '', content2: '' },
-      { id: crypto.randomUUID(), content1: '', content2: '' },
-      { id: crypto.randomUUID(), content1: '', content2: '' },
-      { id: crypto.randomUUID(), content1: '', content2: '' }
-    ] }),
+    getDefaults: () => ({ pairs: createMemoryPairs(4) }),
   },
   snakes_ladders: {
     schema: SnakesSchema as any,

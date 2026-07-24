@@ -122,7 +122,7 @@ export function AdminContentPage() {
 
   async function handleMakerSave(data: any) {
     try {
-      if (makerInitialData) {
+      if (makerInitialData && makerInitialData.id) {
         await apiClient.patch(`/levels/${makerInitialData.id}`, data);
       } else {
         await apiClient.post('/levels', data);
@@ -133,6 +133,39 @@ export function AdminContentPage() {
     } catch (err: any) {
       setError(errorMessage(err, 'No se pudo guardar el nivel.'));
       throw err;
+    }
+  }
+
+  function handleImportCommunityLevel() {
+    document.getElementById('import-community-level')?.click();
+  }
+
+  async function onFileSelected(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    try {
+      const text = await file.text();
+      const data = JSON.parse(text);
+      
+      if (!data?.metadata || !data?.content) {
+        setError('El archivo seleccionado no tiene el formato correcto (faltan metadata o content).');
+        return;
+      }
+
+      setMakerInitialData({
+        section_id: '',
+        title: data.metadata.title || '',
+        color: data.metadata.color || '#18529D',
+        difficulty: data.metadata.difficulty || 'medium',
+        templateType: data.metadata.templateType || 'memory',
+        content: data.content,
+      });
+      setShowMaker(true);
+    } catch (err) {
+      setError('El archivo seleccionado no es un JSON válido.');
+    } finally {
+      e.target.value = '';
     }
   }
 
@@ -191,7 +224,15 @@ export function AdminContentPage() {
             <section className="rounded-lg bg-[--color-card] p-5 shadow-sm flex flex-col justify-center items-center">
               <h2 className="mb-4 text-xl font-semibold">Nuevo Nivel Oficial</h2>
               <p className="text-sm text-gray-500 mb-4 text-center">Usa el editor visual para configurar niveles con validación completa.</p>
-              <Button onClick={() => setShowMaker(true)} className="bg-[#18529D] text-white">Abrir Creador de Niveles</Button>
+              <div className="flex gap-4 mb-6">
+                <Button onClick={() => setShowMaker(true)} className="bg-[#18529D] text-white">Abrir Creador de Niveles</Button>
+                <Button variant="outline" onClick={handleImportCommunityLevel}>Importar Nivel</Button>
+              </div>
+              <div className="text-xs text-gray-500 text-center max-w-sm">
+                <p className="mb-1"><strong>Aviso:</strong> Los niveles que sean expuestos al público son responsabilidad de la institución.</p>
+                <p>Se copiarán los datos válidos y se te pedirá añadir la sección a la que corresponde.</p>
+              </div>
+              <input type="file" accept=".json" style={{ display: 'none' }} id="import-community-level" onChange={onFileSelected} />
             </section>
           </div>
         )}

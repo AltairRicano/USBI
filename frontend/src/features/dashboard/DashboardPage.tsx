@@ -298,6 +298,7 @@ export default function DashboardPage() {
   const canManageContent = user?.role === 'admin' || user?.role === 'operator' || user?.role === 'director';
   
   const [activeTab, setActiveTab] = useState<'public' | 'local'>('public');
+  const [isMenuOpen, setIsMenuOpen] = useState(false);
 
   const dashboardQuery = useQuery({
     queryKey: ['dashboard'],
@@ -325,7 +326,61 @@ export default function DashboardPage() {
     <main className="min-h-screen p-8" style={{ backgroundColor: 'var(--color-surface)' }}>
       <div className="max-w-6xl mx-auto space-y-6">
         <header className="flex flex-wrap items-center justify-between gap-4">
-          <div>
+          <div className="flex items-center gap-3">
+            <div>
+              <Button 
+                variant="outline" 
+                size="sm" 
+                onClick={() => setIsMenuOpen(true)} 
+                className="!px-2 !min-w-[44px]"
+                aria-label="Menú principal"
+              >
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" className="w-5 h-5">
+                  <line x1="4" x2="20" y1="12" y2="12" />
+                  <line x1="4" x2="20" y1="6" y2="6" />
+                  <line x1="4" x2="20" y1="18" y2="18" />
+                </svg>
+              </Button>
+
+              {/* Overlay oscuro */}
+              <div 
+                className={`fixed inset-0 z-40 bg-black/40 backdrop-blur-sm transition-opacity duration-300 ${isMenuOpen ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}
+                onClick={() => setIsMenuOpen(false)}
+              />
+
+              {/* Drawer lateral deslizable */}
+              <div 
+                className={`fixed top-0 left-0 bottom-0 w-72 border-r border-[--color-border] shadow-2xl z-50 p-6 flex flex-col gap-4 transform transition-transform duration-300 ease-in-out ${isMenuOpen ? 'translate-x-0' : '-translate-x-full'}`}
+                style={{ backgroundColor: 'var(--color-card)', color: 'var(--theme-text-card)' }}
+              >
+                <div className="flex items-center justify-between mb-8">
+                  <h2 className="text-2xl font-bold text-[--color-primary]">Menú</h2>
+                  <Button variant="ghost" size="sm" onClick={() => setIsMenuOpen(false)} className="!px-2" aria-label="Cerrar menú">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" className="w-6 h-6">
+                      <line x1="18" x2="6" y1="6" y2="18" />
+                      <line x1="6" x2="18" y1="6" y2="18" />
+                    </svg>
+                  </Button>
+                </div>
+                
+                <div className="flex flex-col gap-2">
+                  <Button variant="outline" onClick={() => { setIsMenuOpen(false); navigate('/profile'); }} className="justify-start w-full text-lg py-6">
+                    Perfil
+                  </Button>
+                  {canManageContent && (
+                    <Button variant="primary" onClick={() => { setIsMenuOpen(false); navigate('/admin'); }} className="justify-start w-full text-lg py-6">
+                      Administrar
+                    </Button>
+                  )}
+                </div>
+                
+                <div className="mt-auto">
+                  <Button variant="outline" onClick={handleLogout} className="justify-start w-full text-lg py-6 text-red-500 border-red-200 hover:bg-red-50 dark:hover:bg-red-900/20 dark:border-red-900/50">
+                    Cerrar sesión
+                  </Button>
+                </div>
+              </div>
+            </div>
             <h1 className="text-3xl font-bold" style={{ color: 'var(--color-primary)' }}>
               Bienvenido, {user?.full_name}
             </h1>
@@ -356,17 +411,7 @@ export default function DashboardPage() {
                 </svg>
               )}
             </Button>
-            <Button variant="outline" size="sm" onClick={() => navigate('/profile')}>
-              Perfil
-            </Button>
-            {canManageContent && (
-              <Button variant="primary" size="sm" onClick={() => navigate('/admin')}>
-                Admin
-              </Button>
-            )}
-            <Button variant="outline" size="sm" onClick={handleLogout}>
-              Cerrar sesión
-            </Button>
+
           </div>
         </header>
 

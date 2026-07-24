@@ -12,9 +12,9 @@ export function LevelActions({
   return (
     <div className="flex gap-2 mt-6">
       <Button 
+        variant="primary"
         onClick={onSave} 
         disabled={loading || !isValid} 
-        className="bg-[#22c55e] hover:bg-[#16a34a] text-white"
       >
         {isEditing ? 'Guardar Cambios' : 'Crear Nivel'}
       </Button>

@@ -1,8 +1,10 @@
 import { MemoryPair } from "@usbi/schema";
+import { normalizeMemoryPairs } from "./memory/MemoryPalette.js";
 
 export interface MemoryCard {
   id: string;
   pairId: string;
+  pairColor: string;
   content: string;
   isFlipped: boolean;
   isMatched: boolean;
@@ -15,11 +17,12 @@ export class MemoryEngine {
   private totalPairs = 0;
 
   constructor(pairs: MemoryPair[]) {
-    this.totalPairs = pairs.length;
+    const normalizedPairs = normalizeMemoryPairs(pairs);
+    this.totalPairs = normalizedPairs.length;
     const deck: MemoryCard[] = [];
-    pairs.forEach((pair, index) => {
-      deck.push({ id: `c1_${index}`, pairId: pair.id, content: pair.content1, isFlipped: false, isMatched: false });
-      deck.push({ id: `c2_${index}`, pairId: pair.id, content: pair.content2, isFlipped: false, isMatched: false });
+    normalizedPairs.forEach((pair, index) => {
+      deck.push({ id: `c1_${index}`, pairId: pair.id, pairColor: pair.color, content: pair.content1, isFlipped: false, isMatched: false });
+      deck.push({ id: `c2_${index}`, pairId: pair.id, pairColor: pair.color, content: pair.content2, isFlipped: false, isMatched: false });
     });
     
     // Fisher-Yates shuffle

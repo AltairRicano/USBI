@@ -1,4 +1,5 @@
 import type { CrosswordWord, FakeNewsItem, MemoryPair, MultipleChoice, Snakes } from '@usbi/schema';
+import { filterPlayableMemoryPairs, normalizeMemoryPairs } from '@usbi/engine';
 
 export type TemplateType =
   | 'trivia'
@@ -109,17 +110,7 @@ export function normalizeTriviaContent(content: unknown): MultipleChoice[] {
 
 export function normalizeMemoryContent(content: unknown): MemoryPair[] {
   const rawPairs = readArray(content, 'pairs');
-  return rawPairs
-    .map((item, index) => {
-      const pair = item as { id?: unknown; content1?: unknown; content2?: unknown; color?: unknown };
-      return {
-        id: typeof pair.id === 'string' ? pair.id : `pair-${index + 1}`,
-        content1: typeof pair.content1 === 'string' ? pair.content1 : '',
-        content2: typeof pair.content2 === 'string' ? pair.content2 : '',
-        color: typeof pair.color === 'string' ? pair.color : undefined,
-      };
-    })
-    .filter((pair) => pair.content1 && pair.content2);
+  return filterPlayableMemoryPairs(normalizeMemoryPairs(rawPairs));
 }
 
 export function normalizeFakeNewsContent(content: unknown): FakeNewsItem[] {

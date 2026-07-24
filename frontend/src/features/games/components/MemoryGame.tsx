@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { MemoryPair } from '@usbi/schema';
 import { MemoryEngine, MemoryCard } from '@usbi/engine';
 import clsx from 'clsx';
+import { getMemoryBackCardStyle, getMemoryFrontCardStyle, getMemoryReadableTextColor } from '@usbi/engine';
 
 interface MemoryGameProps {
   pairs: MemoryPair[];
@@ -52,35 +53,49 @@ export const MemoryGame: React.FC<MemoryGameProps> = ({ pairs, onComplete }) => 
             className="relative w-full aspect-[3/4] cursor-pointer"
             style={{ perspective: '1000px' }}
           >
-            <div
-              className={clsx(
-                "w-full h-full transition-transform duration-500 border-2 rounded-xl shadow-md",
-                (card.isFlipped || card.isMatched) ? "rotate-y-180" : ""
-              )}
-              style={{
-                transformStyle: 'preserve-3d',
-                transform: (card.isFlipped || card.isMatched) ? 'rotateY(180deg)' : 'rotateY(0deg)',
-              }}
-            >
+              <div
+                className={clsx(
+                  'w-full h-full transition-transform duration-500 border-2 rounded-xl shadow-md',
+                  (card.isFlipped || card.isMatched) ? 'rotate-y-180' : '',
+                  card.isMatched ? 'shadow-lg' : '',
+                )}
+                style={{
+                  transformStyle: 'preserve-3d',
+                  transform: (card.isFlipped || card.isMatched) ? 'rotateY(180deg)' : 'rotateY(0deg)',
+                }}
+              >
               {/* Back of the card (visible when not flipped) */}
               <div
-                className="absolute w-full h-full bg-blue-600 rounded-xl backface-hidden"
-                style={{ backfaceVisibility: 'hidden' }}
+                className="absolute w-full h-full rounded-xl backface-hidden border border-white/25"
+                style={{
+                  ...getMemoryBackCardStyle(card.pairColor),
+                  backfaceVisibility: 'hidden',
+                }}
               >
-                <div className="flex items-center justify-center h-full w-full opacity-30 text-white font-bold text-4xl">
-                  ?
+                <div className="flex h-full w-full items-center justify-center">
+                  <div className="h-14 w-14 rounded-full border border-white/35 bg-white/10 shadow-inner" />
                 </div>
               </div>
               
               {/* Front of the card (visible when flipped) */}
               <div
                 className={clsx(
-                  "absolute w-full h-full bg-[--color-card] rounded-xl backface-hidden flex items-center justify-center p-2 text-center break-words",
-                  card.isMatched ? "bg-green-100 border-green-400" : "border-slate-300"
+                  'absolute w-full h-full rounded-xl backface-hidden flex items-center justify-center p-2 text-center break-words border',
+                  card.isMatched ? 'ring-2 ring-white/60' : 'border-slate-300',
                 )}
-                style={{ backfaceVisibility: 'hidden', transform: 'rotateY(180deg)' }}
+                style={{
+                  ...getMemoryFrontCardStyle(card.pairColor),
+                  backfaceVisibility: 'hidden',
+                  transform: 'rotateY(180deg)',
+                  borderColor: card.pairColor,
+                }}
               >
-                <span className="text-slate-800 font-medium">{card.content}</span>
+                <span
+                  className="font-semibold"
+                  style={{ color: getMemoryReadableTextColor(card.pairColor) }}
+                >
+                  {card.content}
+                </span>
               </div>
             </div>
           </div>

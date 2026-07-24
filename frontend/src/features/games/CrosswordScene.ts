@@ -137,7 +137,6 @@ export class CrosswordScene extends Phaser.Scene {
     container.addAt(this.highlightGraphics, 0);
 
     // Center and scale the container
-    const padding = 40;
     const scaleX = (this.cameras.main.width - padding * 2) / gridW;
     const scaleY = (this.cameras.main.height - padding * 2) / gridH;
     const scale = Math.min(scaleX, scaleY, 1);

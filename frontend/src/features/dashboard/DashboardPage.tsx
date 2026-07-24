@@ -106,7 +106,7 @@ function LocalContentSection({ navigate }: { navigate: NavigateFunction }) {
             + Crear nuevo
           </Button>
           <Button variant="outline" size="sm" onClick={handleImport}>
-            📥 Importar
+            Importar
           </Button>
         </div>
       </div>

@@ -367,6 +367,9 @@ export default function DashboardPage() {
                   <Button variant="outline" onClick={() => { setIsMenuOpen(false); navigate('/profile'); }} className="justify-start w-full text-lg py-6">
                     Perfil
                   </Button>
+                  <Button variant="outline" onClick={() => { setIsMenuOpen(false); navigate('/maker'); }} className="justify-start w-full text-lg py-6">
+                    Maker
+                  </Button>
                   {canManageContent && (
                     <Button variant="primary" onClick={() => { setIsMenuOpen(false); navigate('/admin'); }} className="justify-start w-full text-lg py-6">
                       Administrar

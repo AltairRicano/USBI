@@ -114,16 +114,6 @@ export function ProfilePage() {
 
                 <div className="rounded-lg border border-[--color-border] p-5 shadow-sm bg-[--color-card] flex flex-col justify-between">
                   <div>
-                    <h3 className="text-lg font-bold mb-2">Crea tu propio nivel</h3>
-                    <p className="text-sm text-[--color-muted] mb-4">Accede al Maker Local para diseñar, probar y descargar tus propios niveles en formato JSON sin necesidad de publicarlos.</p>
-                  </div>
-                  <Button variant="primary" onClick={() => navigate('/maker')} className="w-full mt-4">
-                    Abrir Maker Local
-                  </Button>
-                </div>
-
-                <div className="rounded-lg border border-[--color-border] p-5 shadow-sm bg-[--color-card] flex flex-col justify-between">
-                  <div>
                     <h3 className="text-lg font-bold mb-2">Derechos ARCO y Quejas</h3>
                     <p className="text-sm text-[--color-muted] mb-4">Ejerce tus derechos ARCO (Acceso, Rectificación, Cancelación y Oposición) o presenta quejas sobre el servicio.</p>
                   </div>

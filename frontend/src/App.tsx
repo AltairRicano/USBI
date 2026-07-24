@@ -116,7 +116,7 @@ export default function App() {
           <Route
             path="/maker"
             element={
-              <ProtectedRoute allowedRoles={['admin', 'operator', 'director']}>
+              <ProtectedRoute>
                 <MakerPage />
               </ProtectedRoute>
             }

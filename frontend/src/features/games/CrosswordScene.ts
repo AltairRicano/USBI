@@ -1,8 +1,8 @@
 import Phaser from 'phaser';
-import { CrosswordEngine, CrosswordState } from '@usbi/engine';
+import type { CrosswordEngine, CrosswordState } from '@usbi/engine';
 
 interface SceneData {
-  engine: CrosswordEngine;
+  engine?: CrosswordEngine;
   onFinish?: (score: number) => void;
 }
 
@@ -22,14 +22,25 @@ export class CrosswordScene extends Phaser.Scene {
   }
 
   init(data: SceneData) {
-    this.engine = data.engine;
-    this.onFinish = data.onFinish;
+    this.engine = data.engine ?? this.game.registry.get('crosswordEngine');
+    this.onFinish = data.onFinish ?? this.game.registry.get('crosswordOnFinish');
   }
 
   create() {
     // A nice solid background in case transparent fails
     this.cameras.main.setBackgroundColor('#ffffff');
 
+    if (!this.engine) {
+      this.add.text(
+        this.cameras.main.width / 2,
+        this.cameras.main.height / 2,
+        'No se pudo iniciar el crucigrama',
+        { fontSize: '20px', color: '#666666', fontFamily: 'sans-serif' }
+      ).setOrigin(0.5);
+      return;
+    }
+
+    this.events.once(Phaser.Scenes.Events.SHUTDOWN, this.shutdown, this);
     this.highlightGraphics = this.add.graphics();
     const cells = this.engine.getGridCells();
 
@@ -52,8 +63,15 @@ export class CrosswordScene extends Phaser.Scene {
       if (c.y > maxY) maxY = c.y;
     });
 
-    const gridW = (maxX - minX + 1) * this.cellSize;
-    const gridH = (maxY - minY + 1) * this.cellSize;
+    const cols = maxX - minX + 1;
+    const rows = maxY - minY + 1;
+    const padding = 36;
+    const availableWidth = this.cameras.main.width - padding * 2;
+    const availableHeight = this.cameras.main.height - padding * 2;
+    this.cellSize = Math.max(28, Math.min(54, Math.floor(Math.min(availableWidth / cols, availableHeight / rows))));
+
+    const gridW = cols * this.cellSize;
+    const gridH = rows * this.cellSize;
 
     // Use a Container to hold all cells so we can center them easily
     const container = this.add.container(0, 0);

@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"log"
 	"net/url"
+	"sort"
 	"strings"
 	"time"
 
@@ -165,7 +166,6 @@ func (s *Service) UnpublishLevel(ctx context.Context, adminID, levelID uuid.UUID
 	}
 	return resp, nil
 }
-
 
 func (s *Service) ArchiveLevel(ctx context.Context, adminID, levelID uuid.UUID) (LevelResponse, error) {
 	if adminID == uuid.Nil || levelID == uuid.Nil {
@@ -797,12 +797,219 @@ func validateCrosswordContent(content json.RawMessage) error {
 	if err := json.Unmarshal(content, &payload); err != nil || len(payload.Words) < 2 {
 		return ErrValidation
 	}
+	words := make([]crosswordCandidate, 0, len(payload.Words))
+	seen := make(map[string]struct{}, len(payload.Words))
 	for _, item := range payload.Words {
-		if len([]rune(strings.TrimSpace(item.Word))) < 2 || strings.TrimSpace(item.Clue) == "" {
+		answer := normalizeCrosswordAnswer(item.Word)
+		if len([]rune(answer)) < 2 || strings.TrimSpace(item.Clue) == "" {
 			return ErrValidation
 		}
+		if _, exists := seen[answer]; exists {
+			return ErrValidation
+		}
+		seen[answer] = struct{}{}
+		words = append(words, crosswordCandidate{Answer: answer, Clue: strings.TrimSpace(item.Clue)})
+	}
+	if !canBuildConnectedCrossword(words) {
+		return ErrValidation
 	}
 	return nil
+}
+
+type crosswordCandidate struct {
+	Answer string
+	Clue   string
+}
+
+type crosswordPlaced struct {
+	Answer   string
+	X        int
+	Y        int
+	Vertical bool
+}
+
+type crosswordPoint struct {
+	X int
+	Y int
+}
+
+type crosswordPlacement struct {
+	X        int
+	Y        int
+	Vertical bool
+	Score    int
+}
+
+func canBuildConnectedCrossword(words []crosswordCandidate) bool {
+	if len(words) < 2 {
+		return false
+	}
+	sortedWords := append([]crosswordCandidate(nil), words...)
+	sort.Slice(sortedWords, func(i, j int) bool {
+		return len([]rune(sortedWords[i].Answer)) > len([]rune(sortedWords[j].Answer))
+	})
+
+	for firstIndex := range sortedWords {
+		orderedWords := make([]crosswordCandidate, 0, len(sortedWords))
+		orderedWords = append(orderedWords, sortedWords[firstIndex])
+		orderedWords = append(orderedWords, sortedWords[:firstIndex]...)
+		orderedWords = append(orderedWords, sortedWords[firstIndex+1:]...)
+		if buildConnectedCrosswordCount(orderedWords) == len(words) {
+			return true
+		}
+	}
+	return false
+}
+
+func buildConnectedCrosswordCount(words []crosswordCandidate) int {
+	if len(words) == 0 {
+		return 0
+	}
+	grid := make(map[crosswordPoint]rune)
+	placed := make([]crosswordPlaced, 0, len(words))
+
+	placeCrosswordWord(words[0], 0, 0, false, grid, &placed)
+	for _, word := range words[1:] {
+		placement, ok := findCrosswordPlacement(word, grid, placed)
+		if !ok {
+			continue
+		}
+		placeCrosswordWord(word, placement.X, placement.Y, placement.Vertical, grid, &placed)
+	}
+	return len(placed)
+}
+
+func placeCrosswordWord(word crosswordCandidate, x, y int, vertical bool, grid map[crosswordPoint]rune, placed *[]crosswordPlaced) {
+	*placed = append(*placed, crosswordPlaced{Answer: word.Answer, X: x, Y: y, Vertical: vertical})
+	for i, letter := range []rune(word.Answer) {
+		cx := x
+		cy := y
+		if vertical {
+			cy += i
+		} else {
+			cx += i
+		}
+		grid[crosswordPoint{X: cx, Y: cy}] = letter
+	}
+}
+
+func findCrosswordPlacement(word crosswordCandidate, grid map[crosswordPoint]rune, placed []crosswordPlaced) (crosswordPlacement, bool) {
+	letters := []rune(word.Answer)
+	var best crosswordPlacement
+	found := false
+
+	for wordIndex, letter := range letters {
+		for _, placedWord := range placed {
+			for placedIndex, placedLetter := range []rune(placedWord.Answer) {
+				if placedLetter != letter {
+					continue
+				}
+				intersectionX := placedWord.X
+				intersectionY := placedWord.Y
+				if placedWord.Vertical {
+					intersectionY += placedIndex
+				} else {
+					intersectionX += placedIndex
+				}
+				vertical := !placedWord.Vertical
+				x := intersectionX
+				y := intersectionY
+				if vertical {
+					y -= wordIndex
+				} else {
+					x -= wordIndex
+				}
+				if !canPlaceCrosswordWord(letters, x, y, vertical, grid) {
+					continue
+				}
+				score := absInt(x) + absInt(y)
+				if !found || score < best.Score {
+					best = crosswordPlacement{X: x, Y: y, Vertical: vertical, Score: score}
+					found = true
+				}
+			}
+		}
+	}
+
+	return best, found
+}
+
+func canPlaceCrosswordWord(letters []rune, startX, startY int, vertical bool, grid map[crosswordPoint]rune) bool {
+	intersections := 0
+	for i, letter := range letters {
+		x := startX
+		y := startY
+		if vertical {
+			y += i
+		} else {
+			x += i
+		}
+		point := crosswordPoint{X: x, Y: y}
+		if existing, ok := grid[point]; ok {
+			if existing != letter {
+				return false
+			}
+			intersections++
+			continue
+		}
+
+		adjacentA := crosswordPoint{X: x, Y: y - 1}
+		adjacentB := crosswordPoint{X: x, Y: y + 1}
+		if vertical {
+			adjacentA = crosswordPoint{X: x - 1, Y: y}
+			adjacentB = crosswordPoint{X: x + 1, Y: y}
+		}
+		if _, ok := grid[adjacentA]; ok {
+			return false
+		}
+		if _, ok := grid[adjacentB]; ok {
+			return false
+		}
+	}
+
+	before := crosswordPoint{X: startX - 1, Y: startY}
+	after := crosswordPoint{X: startX + len(letters), Y: startY}
+	if vertical {
+		before = crosswordPoint{X: startX, Y: startY - 1}
+		after = crosswordPoint{X: startX, Y: startY + len(letters)}
+	}
+	if _, ok := grid[before]; ok {
+		return false
+	}
+	if _, ok := grid[after]; ok {
+		return false
+	}
+
+	return intersections > 0
+}
+
+func normalizeCrosswordAnswer(raw string) string {
+	var builder strings.Builder
+	for _, letter := range strings.ToUpper(strings.TrimSpace(raw)) {
+		switch letter {
+		case 'Á', 'À', 'Ä', 'Â':
+			letter = 'A'
+		case 'É', 'È', 'Ë', 'Ê':
+			letter = 'E'
+		case 'Í', 'Ì', 'Ï', 'Î':
+			letter = 'I'
+		case 'Ó', 'Ò', 'Ö', 'Ô':
+			letter = 'O'
+		case 'Ú', 'Ù', 'Ü', 'Û':
+			letter = 'U'
+		}
+		if (letter >= 'A' && letter <= 'Z') || letter == 'Ñ' {
+			builder.WriteRune(letter)
+		}
+	}
+	return builder.String()
+}
+
+func absInt(value int) int {
+	if value < 0 {
+		return -value
+	}
+	return value
 }
 
 func validateSnakesContent(content json.RawMessage) error {

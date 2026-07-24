@@ -32,7 +32,7 @@ import { FakeNewsPreview } from './previews/FakeNewsPreview';
 import { MemoryPreview } from './previews/MemoryPreview';
 import { SnakeLadderPreview } from './previews/SnakeLadderPreview';
 import { generateSnakeLadderLinks } from './snakesLayout';
-import { createMemoryPairs, DEFAULT_MEMORY_BACK_COLOR } from '@usbi/engine';
+import { canBuildConnectedCrossword, createMemoryPairs, DEFAULT_MEMORY_BACK_COLOR, normalizeCrosswordAnswer } from '@usbi/engine';
 
 const triviaDefaults = () => [
   { question: '', options: ['', ''], correct_index: 0 },
@@ -57,46 +57,67 @@ const snakeLadderDefaults = () => {
   };
 };
 
+const MakerCrosswordSchema = CrosswordSchema.superRefine((content, ctx) => {
+  const answers = content.words.map((word) => normalizeCrosswordAnswer(word.word));
+  const hasDuplicates = new Set(answers).size !== answers.length;
+
+  if (hasDuplicates) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['words'],
+      message: 'Las respuestas del crucigrama no pueden repetirse.',
+    });
+  }
+
+  if (!canBuildConnectedCrossword(content.words)) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['words'],
+      message: 'Las palabras deben compartir letras suficientes para generar un crucigrama conectado.',
+    });
+  }
+});
+
 export const levelTemplateRegistry = {
   trivia: {
-    schema: z.array(LocalMultipleChoiceSchema).min(3) as any,
-    FormComponent: TriviaForm as any,
+    schema: z.array(LocalMultipleChoiceSchema).min(3),
+    FormComponent: TriviaForm,
     PreviewComponent: TriviaPreview,
     getDefaults: triviaDefaults,
   },
   crossword: {
-    schema: CrosswordSchema as any,
-    FormComponent: CrosswordForm as any,
+    schema: MakerCrosswordSchema,
+    FormComponent: CrosswordForm,
     PreviewComponent: CrosswordPreview,
     getDefaults: () => ({ words: [{ word: '', clue: '' }, { word: '', clue: '' }] }),
   },
   word_search: {
-    schema: WordSearchSchema as any,
-    FormComponent: WordSearchForm as any,
+    schema: WordSearchSchema,
+    FormComponent: WordSearchForm,
     PreviewComponent: WordSearchPreview,
     getDefaults: () => ({ words: ['', ''], width: 12, height: 12, seed: 1234 }),
   },
   puzzle: {
-    schema: PuzzleSchema as any,
-    FormComponent: PuzzleForm as any,
+    schema: PuzzleSchema,
+    FormComponent: PuzzleForm,
     PreviewComponent: PuzzlePreview,
     getDefaults: () => ({ imageUrl: '', gridSize: 3, seed: 1234 }),
   },
   fake_news: {
-    schema: FakeNewsSchema as any,
-    FormComponent: FakeNewsForm as any,
+    schema: FakeNewsSchema,
+    FormComponent: FakeNewsForm,
     PreviewComponent: FakeNewsPreview,
     getDefaults: () => ({ news: [{ title: '', content: '', isFake: false, reference: '' }] }),
   },
   memory: {
-    schema: MemorySchema as any,
-    FormComponent: MemoryForm as any,
+    schema: MemorySchema,
+    FormComponent: MemoryForm,
     PreviewComponent: MemoryPreview,
     getDefaults: () => ({ back_color: DEFAULT_MEMORY_BACK_COLOR, pairs: createMemoryPairs(4) }),
   },
   snakes_ladders: {
-    schema: SnakesSchema as any,
-    FormComponent: SnakeLadderForm as any,
+    schema: SnakesSchema,
+    FormComponent: SnakeLadderForm,
     PreviewComponent: SnakeLadderPreview,
     getDefaults: snakeLadderDefaults,
   }

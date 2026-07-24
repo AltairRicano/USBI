@@ -1,11 +1,11 @@
-import { useEffect, useRef, useState, useMemo, useCallback } from 'react';
+import { useEffect, useRef, useState, useMemo } from 'react';
 import Phaser from 'phaser';
 import { invoke } from '@tauri-apps/api/core';
-import { CrosswordEngine, CrosswordState } from '@usbi/engine';
-import { CrosswordWord } from '@usbi/schema';
+import { CrosswordEngine, type CrosswordState } from '@usbi/engine';
+import type { CrosswordWord } from '@usbi/schema';
 import { CrosswordScene } from './CrosswordScene';
 import { Card, CardTitle, CardContent } from '../../components/ui/Card';
-import { PhaserGame, IRefPhaserGame } from '../../lib/PhaserGame';
+import { PhaserGame, type IRefPhaserGame } from '../../lib/PhaserGame';
 
 interface CrosswordGameProps {
   words: CrosswordWord[];
@@ -17,6 +17,7 @@ export function CrosswordGame({ words, onFinish }: CrosswordGameProps) {
 
   const engine = useMemo(() => new CrosswordEngine(words), [words]);
   const placedWords = useMemo(() => engine.getPlacedWords(), [engine]);
+  const unplacedWords = useMemo(() => engine.getUnplacedWords(), [engine]);
   const [state, setState] = useState<CrosswordState>(() => engine.getState());
 
 
@@ -31,9 +32,6 @@ export function CrosswordGame({ words, onFinish }: CrosswordGameProps) {
       }
     };
     setup();
-
-    // Set initial state from engine
-    setState({ ...engine.getState() });
 
     const unsubscribe = engine.subscribe((newState) => {
       setState({ ...newState });
@@ -82,30 +80,35 @@ export function CrosswordGame({ words, onFinish }: CrosswordGameProps) {
 
   const gameConfig: Phaser.Types.Core.GameConfig = useMemo(() => ({
     type: Phaser.AUTO,
-    width: 600,
-    height: 600,
+    width: 720,
+    height: 720,
     backgroundColor: '#f8f9fa',
     scene: [CrosswordScene],
     scale: {
       mode: Phaser.Scale.FIT,
       autoCenter: Phaser.Scale.CENTER_BOTH,
     },
-  }), []);
-
-  // This callback is guaranteed to fire after Phaser is ready
-  const handleGameReady = useCallback((game: Phaser.Game) => {
-    game.scene.start('CrosswordScene', { engine, onFinish });
-  }, [engine, onFinish]);
+    callbacks: {
+      preBoot: (game) => {
+        game.registry.set('crosswordEngine', engine);
+        game.registry.set('crosswordOnFinish', onFinish);
+      },
+    },
+  }), [engine, onFinish]);
 
 
   return (
     <Card className="w-full max-w-5xl mx-auto mt-8 flex flex-col md:flex-row gap-4">
       <CardContent className="flex-1 p-0 relative">
         <div
-          className="w-full rounded-xl overflow-hidden shadow-inner relative"
-          style={{ minHeight: '500px', background: '#f8f9fa' }}
+          className="relative mx-auto aspect-square w-full max-w-[720px] overflow-hidden rounded-xl shadow-inner"
+          style={{ background: '#f8f9fa' }}
         >
-           <PhaserGame ref={phaserRef} config={gameConfig} onGameReady={handleGameReady} />
+           <PhaserGame
+             key={words.map((word) => `${word.word}:${word.clue}`).join('|')}
+             ref={phaserRef}
+             config={gameConfig}
+           />
         </div>
       </CardContent>
       <div className="w-full md:w-80 p-6 border-l border-[--color-border] flex flex-col gap-4 overflow-y-auto max-h-[600px]">
@@ -117,6 +120,11 @@ export function CrosswordGame({ words, onFinish }: CrosswordGameProps) {
         {state.isFinished && (
           <div className="mt-2 p-4 bg-green-100 text-green-800 rounded-xl font-bold text-center animate-pulse">
             ¡Completado!
+          </div>
+        )}
+        {unplacedWords.length > 0 && (
+          <div className="mt-2 rounded-xl border border-[--color-error] bg-red-50 p-3 text-sm text-[--color-error]">
+            Hay palabras que no se pudieron cruzar: {unplacedWords.map((word) => word.word).join(', ')}.
           </div>
         )}
         <div className="mt-4 flex flex-col gap-4">

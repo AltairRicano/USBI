@@ -1,6 +1,5 @@
 import { CrosswordWord } from "@usbi/schema";
 
-
 export interface CrosswordCell {
   x: number;
   y: number;
@@ -26,6 +25,7 @@ export interface CrosswordState {
 export class CrosswordEngine {
   private grid: Map<string, CrosswordCell> = new Map();
   private placedWords: PlacedWord[] = [];
+  private unplacedWords: CrosswordWord[] = [];
   private maxX = 0;
   private maxY = 0;
   
@@ -45,77 +45,24 @@ export class CrosswordEngine {
   }
 
   private generateGrid(words: CrosswordWord[]) {
-    // Basic backtracking algorithm
-    if (words.length === 0) return;
-    
-    const sortedWords = [...words].sort((a, b) => b.word.length - a.word.length);
-    const firstWord = sortedWords.shift()!;
-    
-    this.placeWord(firstWord, 0, 0, false);
-
-    for (const w of sortedWords) {
-      this.tryPlaceWord(w);
-    }
-  }
-
-  private placeWord(cw: CrosswordWord, x: number, y: number, isVertical: boolean) {
-    this.placedWords.push({ word: cw.word, clue: cw.clue, x, y, isVertical });
-    for (let i = 0; i < cw.word.length; i++) {
-      const cx = isVertical ? x : x + i;
-      const cy = isVertical ? y + i : y;
-      this.grid.set(`${cx},${cy}`, { x: cx, y: cy, char: cw.word[i] });
-      if (cx > this.maxX) this.maxX = cx;
-      if (cy > this.maxY) this.maxY = cy;
-    }
-  }
-
-  private tryPlaceWord(cw: CrosswordWord): boolean {
-    const word = cw.word;
-    for (let i = 0; i < word.length; i++) {
-      const char = word[i];
-      // Find cells with same char
-      for (const cell of this.grid.values()) {
-        if (cell.char === char) {
-          // Try horizontal
-          if (this.canPlaceWord(word, cell.x - i, cell.y, false)) {
-            this.placeWord(cw, cell.x - i, cell.y, false);
-            return true;
-          }
-          // Try vertical
-          if (this.canPlaceWord(word, cell.x, cell.y - i, true)) {
-            this.placeWord(cw, cell.x, cell.y - i, true);
-            return true;
-          }
-        }
-      }
-    }
-    // If no intersection, place below
-    this.placeWord(cw, 0, this.maxY + 2, false);
-    return true;
-  }
-
-  private canPlaceWord(word: string, startX: number, startY: number, isVertical: boolean): boolean {
-    for (let i = 0; i < word.length; i++) {
-      const cx = isVertical ? startX : startX + i;
-      const cy = isVertical ? startY + i : startY;
-      const key = `${cx},${cy}`;
-      
-      if (this.grid.has(key)) {
-        if (this.grid.get(key)!.char !== word[i]) {
-          return false;
-        }
-      } else {
-        // check adjacent cells to avoid side by side words
-        const adj1 = isVertical ? `${cx - 1},${cy}` : `${cx},${cy - 1}`;
-        const adj2 = isVertical ? `${cx + 1},${cy}` : `${cx},${cy + 1}`;
-        if (this.grid.has(adj1) || this.grid.has(adj2)) return false;
-      }
-    }
-    return true;
+    const layout = buildCrosswordLayout(words);
+    this.grid = layout.grid;
+    this.placedWords = layout.placedWords;
+    this.unplacedWords = layout.unplacedWords;
+    this.maxX = layout.maxX;
+    this.maxY = layout.maxY;
   }
 
   getPlacedWords(): PlacedWord[] {
     return this.placedWords;
+  }
+
+  getUnplacedWords(): CrosswordWord[] {
+    return this.unplacedWords;
+  }
+
+  isBuildComplete(): boolean {
+    return this.unplacedWords.length === 0 && this.placedWords.length === this.initialWords.length;
   }
 
   getGridCells(): CrosswordCell[] {
@@ -142,8 +89,14 @@ export class CrosswordEngine {
     const key = `${this.state.selectedCell.x},${this.state.selectedCell.y}`;
     if (!this.grid.has(key)) return;
     
-    // Normalize and uppercase
-    const cleanChar = char.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase();
+    const cleanChar = normalizeCrosswordAnswer(char).slice(0, 1);
+    if (!cleanChar) {
+      this.state.userGrid.delete(key);
+      this.validate();
+      this.notify();
+      return;
+    }
+
     this.state.userGrid.set(key, cleanChar);
     
     // Move to next cell automatically
@@ -221,4 +174,217 @@ export class CrosswordEngine {
   public destroy() {
     this.listeners.clear();
   }
+}
+
+interface NormalizedCrosswordWord extends CrosswordWord {
+  normalizedWord: string;
+}
+
+interface CrosswordLayout {
+  grid: Map<string, CrosswordCell>;
+  placedWords: PlacedWord[];
+  unplacedWords: CrosswordWord[];
+  maxX: number;
+  maxY: number;
+}
+
+interface Placement {
+  x: number;
+  y: number;
+  isVertical: boolean;
+  score: number;
+}
+
+export function normalizeCrosswordAnswer(value: string): string {
+  return value
+    .trim()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toUpperCase()
+    .replace(/[^A-ZÑ]/g, "");
+}
+
+export function canBuildConnectedCrossword(words: CrosswordWord[]): boolean {
+  const layout = buildCrosswordLayout(words);
+  return layout.unplacedWords.length === 0 && layout.placedWords.length === words.length;
+}
+
+export function buildCrosswordLayout(words: CrosswordWord[]): CrosswordLayout {
+  const normalizedWords = words
+    .map((word) => ({ ...word, normalizedWord: normalizeCrosswordAnswer(word.word) }))
+    .filter((word) => word.normalizedWord.length >= 2 && word.clue.trim().length > 0);
+
+  if (normalizedWords.length === 0) {
+    return emptyLayout(words);
+  }
+
+  const sortedWords = [...normalizedWords].sort((a, b) => b.normalizedWord.length - a.normalizedWord.length);
+  let bestLayout: CrosswordLayout = emptyLayout(words);
+
+  for (let firstIndex = 0; firstIndex < sortedWords.length; firstIndex++) {
+    const orderedWords = [
+      sortedWords[firstIndex],
+      ...sortedWords.slice(0, firstIndex),
+      ...sortedWords.slice(firstIndex + 1),
+    ];
+    const layout = buildGreedyLayout(orderedWords, words);
+    if (layout.placedWords.length > bestLayout.placedWords.length) {
+      bestLayout = layout;
+    }
+    if (layout.unplacedWords.length === 0) {
+      return layout;
+    }
+  }
+
+  return bestLayout;
+}
+
+function buildGreedyLayout(words: NormalizedCrosswordWord[], originalWords: CrosswordWord[]): CrosswordLayout {
+  const grid: Map<string, CrosswordCell> = new Map();
+  const placedWords: PlacedWord[] = [];
+  const unplacedWords: CrosswordWord[] = [];
+
+  placeWord(words[0], 0, 0, false, grid, placedWords);
+
+  for (const word of words.slice(1)) {
+    const placement = findBestPlacement(word, grid, placedWords);
+    if (placement) {
+      placeWord(word, placement.x, placement.y, placement.isVertical, grid, placedWords);
+    } else {
+      unplacedWords.push({ word: word.word, clue: word.clue });
+    }
+  }
+
+  const normalized = normalizeLayout(grid, placedWords);
+  return {
+    ...normalized,
+    unplacedWords: originalWords.filter((word) => {
+      const normalizedWord = normalizeCrosswordAnswer(word.word);
+      return !normalized.placedWords.some((placed) => placed.word === normalizedWord);
+    }),
+  };
+}
+
+function findBestPlacement(
+  word: NormalizedCrosswordWord,
+  grid: Map<string, CrosswordCell>,
+  placedWords: PlacedWord[],
+): Placement | null {
+  let bestPlacement: Placement | null = null;
+  const letters = Array.from(word.normalizedWord);
+
+  for (let wordIndex = 0; wordIndex < letters.length; wordIndex++) {
+    const letter = letters[wordIndex];
+    for (const placed of placedWords) {
+      const placedLetters = Array.from(placed.word);
+      for (let placedIndex = 0; placedIndex < placedLetters.length; placedIndex++) {
+        if (placedLetters[placedIndex] !== letter) continue;
+
+        const intersectionX = placed.isVertical ? placed.x : placed.x + placedIndex;
+        const intersectionY = placed.isVertical ? placed.y + placedIndex : placed.y;
+        const isVertical = !placed.isVertical;
+        const x = isVertical ? intersectionX : intersectionX - wordIndex;
+        const y = isVertical ? intersectionY - wordIndex : intersectionY;
+
+        if (canPlaceWord(letters, x, y, isVertical, grid)) {
+          const score = Math.abs(x) + Math.abs(y);
+          if (!bestPlacement || score < bestPlacement.score) {
+            bestPlacement = { x, y, isVertical, score };
+          }
+        }
+      }
+    }
+  }
+
+  return bestPlacement;
+}
+
+function placeWord(
+  word: NormalizedCrosswordWord,
+  x: number,
+  y: number,
+  isVertical: boolean,
+  grid: Map<string, CrosswordCell>,
+  placedWords: PlacedWord[],
+) {
+  placedWords.push({ word: word.normalizedWord, clue: word.clue, x, y, isVertical });
+  Array.from(word.normalizedWord).forEach((char, index) => {
+    const cx = isVertical ? x : x + index;
+    const cy = isVertical ? y + index : y;
+    grid.set(`${cx},${cy}`, { x: cx, y: cy, char });
+  });
+}
+
+function canPlaceWord(
+  letters: string[],
+  startX: number,
+  startY: number,
+  isVertical: boolean,
+  grid: Map<string, CrosswordCell>,
+): boolean {
+  let intersections = 0;
+
+  for (let i = 0; i < letters.length; i++) {
+    const x = isVertical ? startX : startX + i;
+    const y = isVertical ? startY + i : startY;
+    const cell = grid.get(`${x},${y}`);
+
+    if (cell) {
+      if (cell.char !== letters[i]) return false;
+      intersections++;
+      continue;
+    }
+
+    const adjacentA = isVertical ? `${x - 1},${y}` : `${x},${y - 1}`;
+    const adjacentB = isVertical ? `${x + 1},${y}` : `${x},${y + 1}`;
+    if (grid.has(adjacentA) || grid.has(adjacentB)) return false;
+  }
+
+  const beforeX = isVertical ? startX : startX - 1;
+  const beforeY = isVertical ? startY - 1 : startY;
+  const afterX = isVertical ? startX : startX + letters.length;
+  const afterY = isVertical ? startY + letters.length : startY;
+  if (grid.has(`${beforeX},${beforeY}`) || grid.has(`${afterX},${afterY}`)) return false;
+
+  return intersections > 0;
+}
+
+function normalizeLayout(grid: Map<string, CrosswordCell>, placedWords: PlacedWord[]): Omit<CrosswordLayout, 'unplacedWords'> {
+  const cells = Array.from(grid.values());
+  if (cells.length === 0) {
+    return { grid, placedWords, maxX: 0, maxY: 0 };
+  }
+
+  const minX = Math.min(...cells.map((cell) => cell.x));
+  const minY = Math.min(...cells.map((cell) => cell.y));
+  const normalizedGrid: Map<string, CrosswordCell> = new Map();
+
+  cells.forEach((cell) => {
+    const x = cell.x - minX;
+    const y = cell.y - minY;
+    normalizedGrid.set(`${x},${y}`, { ...cell, x, y });
+  });
+
+  const normalizedPlacedWords = placedWords.map((word) => ({
+    ...word,
+    x: word.x - minX,
+    y: word.y - minY,
+  }));
+
+  return {
+    grid: normalizedGrid,
+    placedWords: normalizedPlacedWords,
+    maxX: Math.max(...Array.from(normalizedGrid.values()).map((cell) => cell.x)),
+    maxY: Math.max(...Array.from(normalizedGrid.values()).map((cell) => cell.y)),
+  };
+}
+
+function emptyLayout(unplacedWords: CrosswordWord[]): CrosswordLayout {
+  return {
+    grid: new Map(),
+    placedWords: [],
+    unplacedWords,
+    maxX: 0,
+    maxY: 0,
+  };
 }

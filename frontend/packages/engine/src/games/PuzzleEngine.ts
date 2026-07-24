@@ -50,7 +50,7 @@ export class PuzzleEngine {
     let startIndex = 0;
 
     for (let i = 0; i < piecesCount; i++) {
-      let length = baseLength + (remainder > 0 ? 1 : 0);
+      const length = baseLength + (remainder > 0 ? 1 : 0);
       remainder--;
       pieces.push({
         id: `piece-${i}`,
@@ -63,7 +63,7 @@ export class PuzzleEngine {
     // Shuffle
     let isSolved = true;
     let maxAttempts = 100;
-    let shuffled = [...pieces];
+    const shuffled = [...pieces];
 
     while (isSolved && maxAttempts > 0) {
       maxAttempts--;

@@ -14,7 +14,8 @@ export function LevelActions({
       <Button 
         variant="primary"
         onClick={onSave} 
-        disabled={loading || !isValid} 
+        disabled={loading || !isValid}
+        style={{ backgroundColor: '#22c55e', color: 'white', borderColor: '#22c55e' }}
       >
         {isEditing ? 'Guardar Cambios' : 'Crear Nivel'}
       </Button>

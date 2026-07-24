@@ -112,8 +112,8 @@ export const WordSearchSchema = z.object({
 });
 
 export const PuzzleSchema = z.object({
-  imageUrl: z.string().url(),
-  gridSize: z.number().int().min(2).max(10).default(3),
+  phrase: z.string().min(1),
+  pieces: z.number().int().min(3).max(20).default(3),
   seed: z.number().int().optional(),
 });
 

@@ -101,7 +101,7 @@ export const levelTemplateRegistry = {
     schema: PuzzleSchema,
     FormComponent: PuzzleForm,
     PreviewComponent: PuzzlePreview,
-    getDefaults: () => ({ imageUrl: '', gridSize: 3, seed: 1234 }),
+    getDefaults: () => ({ phrase: '', pieces: 3, seed: 1234 }),
   },
   fake_news: {
     schema: FakeNewsSchema,

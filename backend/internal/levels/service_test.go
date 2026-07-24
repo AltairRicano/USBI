@@ -183,12 +183,18 @@ func TestValidateLevelInput_TemplateContracts(t *testing.T) {
 		{
 			name:         "valid puzzle",
 			templateType: "puzzle",
-			content:      json.RawMessage(`{"imageUrl":"https://dummyimage.com/600x600/18529d/ffffff&text=USBI","gridSize":3}`),
+			content:      json.RawMessage(`{"phrase":"Ordena esta frase de prueba","pieces":5,"seed":2026}`),
 		},
 		{
-			name:         "invalid puzzle url",
+			name:         "invalid puzzle needs phrase",
 			templateType: "puzzle",
-			content:      json.RawMessage(`{"imageUrl":"not-a-url","gridSize":3}`),
+			content:      json.RawMessage(`{"pieces":5}`),
+			wantErr:      true,
+		},
+		{
+			name:         "invalid puzzle pieces",
+			templateType: "puzzle",
+			content:      json.RawMessage(`{"phrase":"Ordena esta frase","pieces":2}`),
 			wantErr:      true,
 		},
 		{

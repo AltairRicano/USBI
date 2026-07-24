@@ -58,9 +58,6 @@ export function ProfilePage() {
           <Button variant="outline" size="sm">
             <Link to="/dashboard">Dashboard</Link>
           </Button>
-          <Button variant="outline" size="sm">
-            <Link to="/arco">ARCO</Link>
-          </Button>
         </header>
 
         {error && <p className="rounded border border-[--color-error] bg-[--color-card] p-3 text-[--color-error]">{error}</p>}
@@ -99,7 +96,7 @@ export function ProfilePage() {
                 {(progress.badges ?? []).length === 0 && <p className="text-sm text-[--color-muted]">Aún no hay insignias.</p>}
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
                 <div className="rounded-lg border border-[--color-border] p-5 shadow-sm bg-[--color-card]">
                   <h3 className="text-lg font-bold mb-2">Filtro Visual</h3>
                   <p className="text-sm text-[--color-muted] mb-4">Ajusta los colores de la aplicación para mejorar tu experiencia visual.</p>
@@ -120,8 +117,18 @@ export function ProfilePage() {
                     <h3 className="text-lg font-bold mb-2">Crea tu propio nivel</h3>
                     <p className="text-sm text-[--color-muted] mb-4">Accede al Maker Local para diseñar, probar y descargar tus propios niveles en formato JSON sin necesidad de publicarlos.</p>
                   </div>
-                  <Button variant="primary" onClick={() => navigate('/maker')} className="w-full">
+                  <Button variant="primary" onClick={() => navigate('/maker')} className="w-full mt-4">
                     Abrir Maker Local
+                  </Button>
+                </div>
+
+                <div className="rounded-lg border border-[--color-border] p-5 shadow-sm bg-[--color-card] flex flex-col justify-between">
+                  <div>
+                    <h3 className="text-lg font-bold mb-2">Derechos ARCO y Quejas</h3>
+                    <p className="text-sm text-[--color-muted] mb-4">Ejerce tus derechos ARCO (Acceso, Rectificación, Cancelación y Oposición) o presenta quejas sobre el servicio.</p>
+                  </div>
+                  <Button variant="outline" onClick={() => navigate('/arco')} className="w-full mt-4 border-red-500 text-red-500 hover:bg-red-500 hover:text-white transition-colors">
+                    Ir a Centro de Quejas
                   </Button>
                 </div>
               </div>

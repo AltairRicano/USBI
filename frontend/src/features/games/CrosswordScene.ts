@@ -11,8 +11,7 @@ export class CrosswordScene extends Phaser.Scene {
   private onFinish?: (score: number) => void;
   private unsubscribeEngine?: () => void;
   
-  private cellSize: number = 40;
-  private gridOffset: { x: number, y: number } = { x: 0, y: 0 };
+  private cellSize: number = 50;
   
   private cellRects: Map<string, Phaser.GameObjects.Rectangle> = new Map();
   private cellTexts: Map<string, Phaser.GameObjects.Text> = new Map();
@@ -28,25 +27,18 @@ export class CrosswordScene extends Phaser.Scene {
   }
 
   create() {
-    // Draw a white background to prevent black canvas bleed-through
-    this.add.rectangle(
-      this.cameras.main.width / 2,
-      this.cameras.main.height / 2,
-      this.cameras.main.width,
-      this.cameras.main.height,
-      0xf8f9fa
-    );
+    // A nice solid background in case transparent fails
+    this.cameras.main.setBackgroundColor('#ffffff');
 
     this.highlightGraphics = this.add.graphics();
     const cells = this.engine.getGridCells();
 
-    // Guard: nothing to draw if engine has no placed words
     if (cells.length === 0) {
       this.add.text(
         this.cameras.main.width / 2,
         this.cameras.main.height / 2,
         'Sin palabras para mostrar',
-        { fontSize: '20px', color: '#666666', fontFamily: 'sans-serif' }
+        { fontSize: '24px', color: '#ff0000', fontFamily: 'sans-serif' }
       ).setOrigin(0.5);
       return;
     }
@@ -63,22 +55,32 @@ export class CrosswordScene extends Phaser.Scene {
     const gridW = (maxX - minX + 1) * this.cellSize;
     const gridH = (maxY - minY + 1) * this.cellSize;
 
-    this.gridOffset.x = (this.cameras.main.width - gridW) / 2 - (minX * this.cellSize);
-    this.gridOffset.y = (this.cameras.main.height - gridH) / 2 - (minY * this.cellSize);
+    // Use a Container to hold all cells so we can center them easily
+    const container = this.add.container(0, 0);
 
     // Build a set of word-start positions for numbering
     const wordStartLabels = new Map<string, number>();
-    this.engine.getPlacedWords().forEach((pw, idx) => {
-      wordStartLabels.set(`${pw.x},${pw.y}`, idx + 1);
+    const sortedWords = [...this.engine.getPlacedWords()].sort((a, b) => {
+      if (a.y === b.y) return a.x - b.x;
+      return a.y - b.y;
+    });
+    
+    let currentNum = 1;
+    sortedWords.forEach((pw) => {
+      const key = `${pw.x},${pw.y}`;
+      if (!wordStartLabels.has(key)) {
+        wordStartLabels.set(key, currentNum++);
+      }
     });
 
     cells.forEach(c => {
-      const px = this.gridOffset.x + c.x * this.cellSize;
-      const py = this.gridOffset.y + c.y * this.cellSize;
+      // Local position inside the grid
+      const px = (c.x - minX) * this.cellSize;
+      const py = (c.y - minY) * this.cellSize;
 
       const rect = this.add
         .rectangle(px + this.cellSize / 2, py + this.cellSize / 2, this.cellSize, this.cellSize, 0xffffff)
-        .setStrokeStyle(1, 0x333333)
+        .setStrokeStyle(2, 0x000000)
         .setInteractive({ cursor: 'pointer' });
 
       rect.on('pointerdown', () => {
@@ -87,9 +89,9 @@ export class CrosswordScene extends Phaser.Scene {
 
       const text = this.add
         .text(px + this.cellSize / 2, py + this.cellSize / 2, '', {
-          fontSize: '22px',
-          color: '#111111',
-          fontFamily: 'monospace',
+          fontSize: '26px',
+          color: '#000000',
+          fontFamily: 'Arial, sans-serif',
           fontStyle: 'bold',
         })
         .setOrigin(0.5);
@@ -98,16 +100,37 @@ export class CrosswordScene extends Phaser.Scene {
       this.cellRects.set(key, rect);
       this.cellTexts.set(key, text);
 
-      // Draw small number label at top-left of word-start cells
+      container.add([rect, text]);
+
+      // Draw small number label
       const labelNum = wordStartLabels.get(key);
       if (labelNum !== undefined) {
-        this.add.text(px + 2, py + 1, String(labelNum), {
-          fontSize: '10px',
-          color: '#555555',
-          fontFamily: 'sans-serif',
+        const numText = this.add.text(px + 4, py + 2, String(labelNum), {
+          fontSize: '12px',
+          color: '#333333',
+          fontFamily: 'Arial, sans-serif',
+          fontStyle: 'bold'
         });
+        container.add(numText);
       }
     });
+
+    // Add highlight graphics to container (behind texts but in front of rects)
+    container.addAt(this.highlightGraphics, 0);
+
+    // Center and scale the container
+    const padding = 40;
+    const scaleX = (this.cameras.main.width - padding * 2) / gridW;
+    const scaleY = (this.cameras.main.height - padding * 2) / gridH;
+    const scale = Math.min(scaleX, scaleY, 1);
+    
+    container.setScale(scale);
+    
+    const scaledW = gridW * scale;
+    const scaledH = gridH * scale;
+    
+    container.x = (this.cameras.main.width - scaledW) / 2;
+    container.y = (this.cameras.main.height - scaledH) / 2;
 
     this.input.keyboard!.on('keydown', this.handleKeyDown, this);
 
@@ -135,8 +158,6 @@ export class CrosswordScene extends Phaser.Scene {
       if (rect) {
         rect.setFillStyle(0xffea00); // Yellow highlight
       }
-      
-      // Optionally highlight word (not fully implemented in state, but basic idea)
     }
 
     // Draw chars
@@ -159,7 +180,6 @@ export class CrosswordScene extends Phaser.Scene {
       this.engine.inputChar(event.key);
     } else if (event.key === 'Backspace') {
       this.engine.inputChar('');
-      // Navigate backwards
       const state = this.engine.getState();
       if (state.orientation === 'horizontal') this.engine.navigate(-1, 0);
       else this.engine.navigate(0, -1);

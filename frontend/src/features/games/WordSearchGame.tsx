@@ -87,7 +87,7 @@ export function WordSearchGame({ words, width = 10, height = 10, seed = 1234, on
           {state.words.map((word, i) => (
             <li 
               key={i}
-              className={`text-lg transition-colors ${state.foundWords.includes(word) ? 'text-gray-300 line-through' : 'text-gray-800 dark:text-gray-200'}`}
+              className={`text-lg font-semibold transition-colors ${state.foundWords.includes(word) ? 'text-[--color-muted] line-through' : 'text-[--color-text]'}`}
             >
               {word}
             </li>

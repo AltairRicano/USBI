@@ -55,6 +55,31 @@ export function CrosswordGame({ words, onFinish }: CrosswordGameProps) {
     };
   }, [engine]);
 
+  // We want to assign numbers based on grid position (y, then x)
+  const numberedWords = useMemo(() => {
+    const sorted = [...placedWords].sort((a, b) => {
+      if (a.y === b.y) return a.x - b.x;
+      return a.y - b.y;
+    });
+    
+    // We only increment the number if it's a NEW cell. Two words starting at the same cell share the same number.
+    const startMap = new Map<string, number>();
+    let currentNumber = 1;
+    
+    return sorted.map(pw => {
+      const key = `${pw.x},${pw.y}`;
+      let num = startMap.get(key);
+      if (num === undefined) {
+        num = currentNumber++;
+        startMap.set(key, num);
+      }
+      return { ...pw, num };
+    });
+  }, [placedWords]);
+
+  const horizontals = useMemo(() => numberedWords.filter(pw => !pw.isVertical), [numberedWords]);
+  const verticals = useMemo(() => numberedWords.filter(pw => pw.isVertical), [numberedWords]);
+
   const gameConfig: Phaser.Types.Core.GameConfig = useMemo(() => ({
     type: Phaser.AUTO,
     width: 600,
@@ -94,18 +119,29 @@ export function CrosswordGame({ words, onFinish }: CrosswordGameProps) {
             ¡Completado!
           </div>
         )}
-        <div className="mt-4 flex flex-col gap-2">
-          <h4 className="font-bold text-lg border-b border-[--color-border] pb-2">Pistas</h4>
-          <ul className="flex flex-col gap-3">
-            {placedWords.map((pw, i) => (
-              <li key={i} className="text-sm text-[--color-text]">
-                <span className="font-bold mr-2">
-                  {pw.isVertical ? '↓' : '→'} ({pw.x},{pw.y}):
-                </span>
-                {pw.clue}
-              </li>
-            ))}
-          </ul>
+        <div className="mt-4 flex flex-col gap-4">
+          <div>
+            <h4 className="font-bold text-lg border-b border-[--color-border] pb-2 mb-3">Horizontales</h4>
+            <ul className="flex flex-col gap-2">
+              {horizontals.map((pw, i) => (
+                <li key={`h-${i}`} className="text-sm text-[--color-text] flex items-start gap-2">
+                  <span className="font-bold shrink-0">{pw.num}.</span>
+                  <span>{pw.clue}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+          <div>
+            <h4 className="font-bold text-lg border-b border-[--color-border] pb-2 mb-3">Verticales</h4>
+            <ul className="flex flex-col gap-2">
+              {verticals.map((pw, i) => (
+                <li key={`v-${i}`} className="text-sm text-[--color-text] flex items-start gap-2">
+                  <span className="font-bold shrink-0">{pw.num}.</span>
+                  <span>{pw.clue}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
         </div>
       </div>
     </Card>

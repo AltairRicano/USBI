@@ -52,20 +52,27 @@ export class WordSearchEngine {
     // Sort words by length descending
     const sortedWords = [...this.state.words].sort((a, b) => b.length - a.length);
 
+    const placedWords: string[] = [];
     for (const word of sortedWords) {
       let placed = false;
       let attempts = 0;
-      while (!placed && attempts < 100) {
+      while (!placed && attempts < 500) {
         attempts++;
         const dir = Math.floor(this.random() * 3); // 0: horiz, 1: vert, 2: diag
         const dx = dir === 0 ? 1 : dir === 1 ? 0 : 1;
         const dy = dir === 0 ? 0 : dir === 1 ? 1 : 1;
         
-        const startX = Math.floor(this.random() * (this.state.width - word.length * dx + 1));
-        const startY = Math.floor(this.random() * (this.state.height - word.length * dy + 1));
+        const maxX = this.state.width - word.length * dx;
+        const maxY = this.state.height - word.length * dy;
+        
+        if (maxX < 0 || maxY < 0) continue; // No cabe en esta dirección
+        
+        const startX = Math.floor(this.random() * (maxX + 1));
+        const startY = Math.floor(this.random() * (maxY + 1));
 
         if (this.canPlaceWord(word, startX, startY, dx, dy)) {
           this.placeWord(word, startX, startY, dx, dy);
+          placedWords.push(word);
           placed = true;
         }
       }
@@ -73,6 +80,9 @@ export class WordSearchEngine {
         console.warn(`Could not place word: ${word}`);
       }
     }
+    
+    // Solo requerir las palabras que sí cupieron
+    this.state.words = placedWords;
 
     // Fill empty cells
     const letters = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";

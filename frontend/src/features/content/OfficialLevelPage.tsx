@@ -9,6 +9,7 @@ import type { CompleteLevelResponse, LevelDTO } from './types';
 import {
   normalizeCrosswordContent,
   normalizeFakeNewsContent,
+  normalizeMemoryBackColorContent,
   normalizeMemoryContent,
   normalizePuzzleContent,
   normalizeSnakesContent,
@@ -89,6 +90,7 @@ export function OfficialLevelPage() {
 
   const triviaQuestions = level.template_type === 'trivia' ? normalizeTriviaContent(level.content) : [];
   const memoryPairs = level.template_type === 'memory' ? normalizeMemoryContent(level.content) : [];
+  const memoryBackColor = level.template_type === 'memory' ? normalizeMemoryBackColorContent(level.content) : undefined;
   const fakeNews = level.template_type === 'fake_news' ? normalizeFakeNewsContent(level.content) : [];
   const wordSearch = level.template_type === 'word_search' ? normalizeWordSearchContent(level.content) : null;
   const puzzle = level.template_type === 'puzzle' ? normalizePuzzleContent(level.content) : null;
@@ -141,7 +143,7 @@ export function OfficialLevelPage() {
             <TriviaGame questions={triviaQuestions} onFinish={finishLevel} />
           )}
           {level.template_type === 'memory' && memoryPairs.length >= 2 && (
-            <MemoryGame pairs={memoryPairs} onComplete={(score) => void finishLevel(score)} />
+            <MemoryGame pairs={memoryPairs} backColor={memoryBackColor} onComplete={(score) => void finishLevel(score)} />
           )}
           {level.template_type === 'fake_news' && fakeNews.length > 0 && (
             <FakeNewsGame news={fakeNews} onComplete={(score) => void finishLevel(score)} />

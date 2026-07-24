@@ -1,11 +1,21 @@
 import type { MemoryPairWithColor } from '@usbi/engine';
-import { getMemoryBackCardStyle, getMemoryFrontCardStyle, getMemoryReadableTextColor, normalizeMemoryPairs } from '@usbi/engine';
+import { getMemoryBackCardStyle, getMemoryFrontCardStyle, getMemoryReadableTextColor, normalizeMemoryBackColor, normalizeMemoryPairs } from '@usbi/engine';
 
-export function MemoryPreview({ value }: { value: { pairs?: MemoryPairWithColor[] } }) {
+export function MemoryPreview({ value }: { value: { back_color?: string; pairs?: MemoryPairWithColor[] } }) {
   const pairs = normalizeMemoryPairs(value.pairs ?? []);
+  const backColor = normalizeMemoryBackColor(value.back_color);
 
   return (
     <div className="space-y-4">
+      <section className="rounded-lg border border-[--color-border] bg-[--color-card] p-4 shadow-sm">
+        <div className="grid gap-4 sm:grid-cols-[160px_1fr]">
+          <MemoryBackSample color={backColor} />
+          <div className="flex flex-col justify-center">
+            <p className="text-sm font-semibold">Dorso común</p>
+            <p className="text-xs text-[--color-muted]">{backColor.toUpperCase()}</p>
+          </div>
+        </div>
+      </section>
       <div className="grid gap-4 md:grid-cols-2">
         {pairs.map((pair, index) => (
           <article key={pair.id} className="rounded-lg border border-[--color-border] bg-[--color-card] p-4 shadow-sm">
@@ -19,9 +29,6 @@ export function MemoryPreview({ value }: { value: { pairs?: MemoryPairWithColor[
             <div className="grid gap-3 sm:grid-cols-2">
               <MemoryFrontSample label="Tarjeta A" content={pair.content1 || 'Concepto'} color={pair.color} />
               <MemoryFrontSample label="Tarjeta B" content={pair.content2 || 'Descripción'} color={pair.color} />
-            </div>
-            <div className="mt-3">
-              <MemoryBackSample color={pair.color} />
             </div>
           </article>
         ))}
@@ -39,7 +46,6 @@ function MemoryBackSample({ color }: { color: string }) {
     >
       <div className="space-y-1">
         <p className="text-xs font-semibold uppercase tracking-[0.24em]">Dorso</p>
-        <p className="text-[11px] opacity-80">Mismo patrón, distinto color</p>
       </div>
     </div>
   );

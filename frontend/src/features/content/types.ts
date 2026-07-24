@@ -1,5 +1,5 @@
 import type { CrosswordWord, FakeNewsItem, MemoryPair, MultipleChoice, Snakes } from '@usbi/schema';
-import { filterPlayableMemoryPairs, normalizeMemoryPairs } from '@usbi/engine';
+import { filterPlayableMemoryPairs, normalizeMemoryBackColor, normalizeMemoryPairs } from '@usbi/engine';
 
 export type TemplateType =
   | 'trivia'
@@ -111,6 +111,11 @@ export function normalizeTriviaContent(content: unknown): MultipleChoice[] {
 export function normalizeMemoryContent(content: unknown): MemoryPair[] {
   const rawPairs = readArray(content, 'pairs');
   return filterPlayableMemoryPairs(normalizeMemoryPairs(rawPairs));
+}
+
+export function normalizeMemoryBackColorContent(content: unknown): string {
+  const data = content as { back_color?: unknown } | null;
+  return normalizeMemoryBackColor(data?.back_color);
 }
 
 export function normalizeFakeNewsContent(content: unknown): FakeNewsItem[] {

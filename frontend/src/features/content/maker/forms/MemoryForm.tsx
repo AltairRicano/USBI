@@ -4,6 +4,9 @@ import { Input } from '../../../../components/ui/Input';
 import {
   createMemoryColorOptions,
   createMemoryPairs,
+  DEFAULT_MEMORY_BACK_COLOR,
+  getMemoryBackCardStyle,
+  normalizeMemoryBackColor,
   normalizeMemoryPairs,
   type MemoryPairWithColor,
 } from '@usbi/engine';
@@ -13,8 +16,12 @@ type MemoryFormValue = Memory;
 
 export function MemoryForm({ value, onChange }: { value: MemoryFormValue; onChange: (val: MemoryFormValue) => void }) {
   const pairs = normalizeMemoryPairs(value.pairs || createMemoryPairs(4));
+  const backColor = normalizeMemoryBackColor(value.back_color);
   const palette = createMemoryColorOptions(Math.max(12, pairs.length + 6));
 
+  const updateBackColor = (color: string) => {
+    onChange({ ...value, back_color: normalizeMemoryBackColor(color), pairs });
+  };
   const addPair = () => {
     const nextColor = palette.find((color) => !pairs.some((pair) => pair.color === color))
       ?? palette[pairs.length % palette.length];
@@ -33,6 +40,20 @@ export function MemoryForm({ value, onChange }: { value: MemoryFormValue; onChan
 
   return (
     <div className="space-y-4">
+      <div className="grid gap-4 rounded-lg border border-[--color-border] p-4 md:grid-cols-[1fr_180px]">
+        <Input
+          label="Color del dorso"
+          type="color"
+          value={backColor || DEFAULT_MEMORY_BACK_COLOR}
+          onChange={(event: ChangeEvent<HTMLInputElement>) => updateBackColor(event.target.value)}
+          required
+        />
+        <div
+          className="h-24 rounded-lg border border-[--color-border]"
+          style={getMemoryBackCardStyle(backColor)}
+          aria-label="Vista previa del dorso común"
+        />
+      </div>
       {pairs.map((p, idx) => (
         <div key={p.id} className="grid gap-4 rounded-lg border border-[--color-border] p-4 md:grid-cols-[1fr_1fr_220px_auto]">
           <div className="flex-1 space-y-2">

@@ -32,7 +32,7 @@ import { FakeNewsPreview } from './previews/FakeNewsPreview';
 import { MemoryPreview } from './previews/MemoryPreview';
 import { SnakeLadderPreview } from './previews/SnakeLadderPreview';
 import { generateSnakeLadderLinks } from './snakesLayout';
-import { createMemoryPairs } from '@usbi/engine';
+import { createMemoryPairs, DEFAULT_MEMORY_BACK_COLOR } from '@usbi/engine';
 
 const triviaDefaults = () => [
   { question: '', options: ['', ''], correct_index: 0 },
@@ -92,7 +92,7 @@ export const levelTemplateRegistry = {
     schema: MemorySchema as any,
     FormComponent: MemoryForm as any,
     PreviewComponent: MemoryPreview,
-    getDefaults: () => ({ pairs: createMemoryPairs(4) }),
+    getDefaults: () => ({ back_color: DEFAULT_MEMORY_BACK_COLOR, pairs: createMemoryPairs(4) }),
   },
   snakes_ladders: {
     schema: SnakesSchema as any,

@@ -79,6 +79,7 @@ export const MemoryPairSchema = z.object({
 });
 
 export const MemorySchema = z.object({
+  back_color: z.string().optional(),
   pairs: z.array(MemoryPairSchema).min(4), // Specification says min 4 pairs
 });
 

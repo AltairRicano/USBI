@@ -8,6 +8,8 @@ export interface MemoryCardStyle {
   [key: string]: string | number | undefined;
 }
 
+export const DEFAULT_MEMORY_BACK_COLOR = '#18529d';
+
 export function createMemoryPairs(count: number): MemoryPairWithColor[] {
   return Array.from({ length: Math.max(0, Math.trunc(count)) }, (_, index) => ({
     id: `pair-${index + 1}`,
@@ -40,6 +42,10 @@ export function filterPlayableMemoryPairs(pairs: MemoryPairWithColor[]): MemoryP
   return pairs.filter((pair) => pair.content1.length > 0 && pair.content2.length > 0);
 }
 
+export function normalizeMemoryBackColor(color: unknown): string {
+  return isHexColor(color) ? color.toLowerCase() : DEFAULT_MEMORY_BACK_COLOR;
+}
+
 export function getMemoryReadableTextColor(background: string): '#0f172a' | '#ffffff' {
   const rgb = hexToRgb(background);
   if (!rgb) return '#ffffff';
@@ -50,8 +56,10 @@ export function getMemoryReadableTextColor(background: string): '#0f172a' | '#ff
 }
 
 export function getMemoryBackCardStyle(color: string): MemoryCardStyle {
+  const backColor = normalizeMemoryBackColor(color);
+
   return {
-    backgroundColor: color,
+    backgroundColor: backColor,
     backgroundImage: [
       'radial-gradient(circle at 20% 22%, rgba(255,255,255,0.25) 0 7%, transparent 8%)',
       'radial-gradient(circle at 78% 28%, rgba(255,255,255,0.18) 0 5%, transparent 6%)',
@@ -60,7 +68,7 @@ export function getMemoryBackCardStyle(color: string): MemoryCardStyle {
       'repeating-linear-gradient(135deg, rgba(255,255,255,0.10) 0 12px, rgba(255,255,255,0.02) 12px 24px)',
     ].join(', '),
     backgroundBlendMode: 'soft-light',
-    color: getMemoryReadableTextColor(color),
+    color: getMemoryReadableTextColor(backColor),
   };
 }
 

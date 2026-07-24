@@ -2,17 +2,19 @@ import React, { useState, useEffect } from 'react';
 import { MemoryPair } from '@usbi/schema';
 import { MemoryEngine, MemoryCard } from '@usbi/engine';
 import clsx from 'clsx';
-import { getMemoryBackCardStyle, getMemoryFrontCardStyle, getMemoryReadableTextColor } from '@usbi/engine';
+import { DEFAULT_MEMORY_BACK_COLOR, getMemoryBackCardStyle, getMemoryFrontCardStyle, getMemoryReadableTextColor, normalizeMemoryBackColor } from '@usbi/engine';
 
 interface MemoryGameProps {
   pairs: MemoryPair[];
+  backColor?: string;
   onComplete: (score: number, maxScore: number) => void;
 }
 
-export const MemoryGame: React.FC<MemoryGameProps> = ({ pairs, onComplete }) => {
+export const MemoryGame: React.FC<MemoryGameProps> = ({ pairs, backColor = DEFAULT_MEMORY_BACK_COLOR, onComplete }) => {
   const [engine] = useState(() => new MemoryEngine(pairs));
   const [cards, setCards] = useState<MemoryCard[]>(engine.getCards());
   const [isProcessing, setIsProcessing] = useState(false);
+  const cardBackColor = normalizeMemoryBackColor(backColor);
 
   useEffect(() => {
     // window.__TAURI__?.invoke('set_game_status', { isPlaying: true });
@@ -68,7 +70,7 @@ export const MemoryGame: React.FC<MemoryGameProps> = ({ pairs, onComplete }) => 
               <div
                 className="absolute w-full h-full rounded-xl backface-hidden border border-white/25"
                 style={{
-                  ...getMemoryBackCardStyle(card.pairColor),
+                  ...getMemoryBackCardStyle(cardBackColor),
                   backfaceVisibility: 'hidden',
                 }}
               >

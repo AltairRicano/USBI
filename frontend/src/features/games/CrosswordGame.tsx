@@ -111,7 +111,7 @@ export function CrosswordGame({ words, onFinish }: CrosswordGameProps) {
            />
         </div>
       </CardContent>
-      <div className="w-full md:w-80 p-6 border-l border-[--color-border] flex flex-col gap-4 overflow-y-auto max-h-[600px]">
+      <div className="w-full md:w-96 p-6 border-t md:border-t-0 md:border-l border-[--color-border] flex flex-col gap-4 overflow-y-auto md:max-h-[720px]">
         <CardTitle className="text-xl">Crucigrama</CardTitle>
         <div className="flex flex-col gap-2 bg-white dark:bg-[--color-card] p-4 rounded-xl border border-[--color-border]">
           <p className="text-sm text-[--color-text-muted]">Puntuación</p>

@@ -120,18 +120,24 @@ export class WordSearchEngine {
     const wordStr = selectedLetters.map(pos => this.state.grid[pos.y][pos.x]).join('');
     const wordStrRev = wordStr.split('').reverse().join('');
     
+    let updated = false;
     if (this.state.words.includes(wordStr) && !this.state.foundWords.includes(wordStr)) {
-      this.state.foundWords.push(wordStr);
+      this.state.foundWords = [...this.state.foundWords, wordStr];
       this.state.score += 100;
+      updated = true;
     } else if (this.state.words.includes(wordStrRev) && !this.state.foundWords.includes(wordStrRev)) {
-      this.state.foundWords.push(wordStrRev);
+      this.state.foundWords = [...this.state.foundWords, wordStrRev];
       this.state.score += 100;
+      updated = true;
     }
     
-    if (this.state.foundWords.length === this.state.words.length) {
-      this.state.isFinished = true;
+    if (updated) {
+      if (this.state.foundWords.length === this.state.words.length) {
+        this.state.isFinished = true;
+      }
+      this.state = { ...this.state };
+      this.notify();
     }
-    this.notify();
   }
 
   public getState(): WordSearchState {

@@ -37,6 +37,10 @@ export class MemoryEngine {
     return this.cards;
   }
 
+  getFlippedCount(): number {
+    return this.flippedIndices.length;
+  }
+
   flipCard(index: number): boolean {
     if (index < 0 || index >= this.cards.length) return false;
     const card = this.cards[index];

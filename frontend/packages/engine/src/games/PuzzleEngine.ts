@@ -1,16 +1,12 @@
-
-
 export interface PuzzlePiece {
   id: string;
-  originalGridX: number;
-  originalGridY: number;
-  currentX: number;
-  currentY: number;
-  isLocked: boolean;
+  text: string;
+  originalIndex: number;
 }
 
 export interface PuzzleState {
-  gridSize: number;
+  phrase: string;
+  piecesCount: number;
   pieces: PuzzlePiece[];
   isFinished: boolean;
   score: number;
@@ -22,13 +18,17 @@ export class PuzzleEngine {
   private listeners: Set<(state: PuzzleState) => void> = new Set();
   private seed: number;
 
-  constructor(gridSize: number, seed = 12345) {
-    if (gridSize < 2 || gridSize > 10) {
-      throw new Error("Invalid configuration: gridSize must be between 2 and 10");
+  constructor(phrase: string, piecesCount: number, seed = 12345) {
+    if (piecesCount < 3 || piecesCount > 20) {
+      throw new Error("Invalid configuration: pieces must be between 3 and 20");
+    }
+    if (!phrase) {
+      throw new Error("Invalid configuration: phrase cannot be empty");
     }
     this.seed = seed;
     this.state = {
-      gridSize,
+      phrase,
+      piecesCount,
       pieces: [],
       isFinished: false,
       score: 0,
@@ -43,87 +43,61 @@ export class PuzzleEngine {
   }
 
   private generatePieces() {
-    const { gridSize } = this.state;
-    const positions: { x: number, y: number }[] = [];
-    
-    for (let y = 0; y < gridSize; y++) {
-      for (let x = 0; x < gridSize; x++) {
-        this.state.pieces.push({
-          id: `${x}-${y}`,
-          originalGridX: x,
-          originalGridY: y,
-          currentX: x,
-          currentY: y,
-          isLocked: false
-        });
-        positions.push({ x, y });
-      }
+    const { phrase, piecesCount } = this.state;
+    const pieces: PuzzlePiece[] = [];
+    const baseLength = Math.floor(phrase.length / piecesCount);
+    let remainder = phrase.length % piecesCount;
+    let startIndex = 0;
+
+    for (let i = 0; i < piecesCount; i++) {
+      let length = baseLength + (remainder > 0 ? 1 : 0);
+      remainder--;
+      pieces.push({
+        id: `piece-${i}`,
+        text: phrase.substring(startIndex, startIndex + length),
+        originalIndex: i,
+      });
+      startIndex += length;
     }
 
-    // Shuffle positions deterministically and distinctly from solution
+    // Shuffle
     let isSolved = true;
     let maxAttempts = 100;
-    
+    let shuffled = [...pieces];
+
     while (isSolved && maxAttempts > 0) {
       maxAttempts--;
-      
-      // Fisher-Yates shuffle
-      for (let i = positions.length - 1; i > 0; i--) {
+      for (let i = shuffled.length - 1; i > 0; i--) {
         const j = Math.floor(this.random() * (i + 1));
-        [positions[i], positions[j]] = [positions[j], positions[i]];
+        [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
       }
-
-      // Check if it's identical to solution
-      isSolved = this.state.pieces.every((p, i) => 
-        p.originalGridX === positions[i].x && p.originalGridY === positions[i].y
-      );
+      isSolved = shuffled.every((p, i) => p.originalIndex === i);
     }
-    
-    // Apply shuffled positions
-    this.state.pieces.forEach((p, i) => {
-      p.currentX = positions[i].x;
-      p.currentY = positions[i].y;
-    });
+
+    this.state.pieces = shuffled;
   }
 
-  public movePiece(id: string, newX: number, newY: number) {
+  public reorderPieces(fromIndex: number, toIndex: number) {
     if (this.state.isFinished) return;
+    if (fromIndex < 0 || fromIndex >= this.state.pieces.length || toIndex < 0 || toIndex >= this.state.pieces.length) return;
 
-    const piece = this.state.pieces.find(p => p.id === id);
-    if (!piece || piece.isLocked) return;
-
-    piece.currentX = newX;
-    piece.currentY = newY;
+    const newPieces = [...this.state.pieces];
+    const [movedPiece] = newPieces.splice(fromIndex, 1);
+    newPieces.splice(toIndex, 0, movedPiece);
+    
+    this.state.pieces = newPieces;
     this.state.moves++;
-
-    this.notify();
-  }
-
-  public snapPiece(id: string): boolean {
-    if (this.state.isFinished) return false;
-    const piece = this.state.pieces.find(p => p.id === id);
-    if (!piece || piece.isLocked) return false;
-
-    // Distance in grid units. Tolerance is e.g. 0.2 (handled in scene mostly, but engine verifies logical snap)
-    const dx = Math.abs(piece.currentX - piece.originalGridX);
-    const dy = Math.abs(piece.currentY - piece.originalGridY);
     
-    if (dx < 0.2 && dy < 0.2) {
-      piece.currentX = piece.originalGridX;
-      piece.currentY = piece.originalGridY;
-      piece.isLocked = true;
-      this.state.score += 100;
-      this.checkCompletion();
-      this.notify();
-      return true;
-    }
-    
+    this.checkCompletion();
     this.notify();
-    return false;
   }
 
   private checkCompletion() {
-    this.state.isFinished = this.state.pieces.every(p => p.isLocked);
+    this.state.isFinished = this.state.pieces.every((p, i) => p.originalIndex === i);
+    if (this.state.isFinished) {
+      this.state.score = 1000 - (this.state.moves * 10);
+      if (this.state.score < 100) this.state.score = 100;
+    }
   }
 
   public getState(): PuzzleState {
@@ -144,7 +118,6 @@ export class PuzzleEngine {
     this.state.moves = 0;
     this.state.score = 0;
     this.state.isFinished = false;
-    this.state.pieces = [];
     this.generatePieces();
     this.notify();
   }

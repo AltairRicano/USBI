@@ -767,20 +767,20 @@ func validateWordSearchContent(content json.RawMessage) error {
 
 func validatePuzzleContent(content json.RawMessage) error {
 	var payload struct {
-		ImageURL string `json:"imageUrl"`
-		GridSize *int32 `json:"gridSize,omitempty"`
-		Seed     *int32 `json:"seed,omitempty"`
+		Phrase string `json:"phrase"`
+		Pieces *int32 `json:"pieces,omitempty"`
+		Seed   *int32 `json:"seed,omitempty"`
 	}
 	if err := json.Unmarshal(content, &payload); err != nil {
 		log.Printf("validatePuzzleContent unmarshal error: %v, content: %s", err, string(content))
 		return ErrValidation
 	}
-	if !isHTTPURL(payload.ImageURL) {
-		log.Printf("validatePuzzleContent invalid URL: %s", payload.ImageURL)
+	if strings.TrimSpace(payload.Phrase) == "" {
+		log.Printf("validatePuzzleContent empty phrase")
 		return ErrValidation
 	}
-	if payload.GridSize != nil && (*payload.GridSize < 2 || *payload.GridSize > 10) {
-		log.Printf("validatePuzzleContent grid size out of bounds: %v", *payload.GridSize)
+	if payload.Pieces != nil && (*payload.Pieces < 3 || *payload.Pieces > 20) {
+		log.Printf("validatePuzzleContent pieces out of bounds: %v", *payload.Pieces)
 		return ErrValidation
 	}
 	return nil

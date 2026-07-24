@@ -1,23 +1,29 @@
-import { useEffect, useRef, useState, useMemo, useCallback } from 'react';
-import Phaser from 'phaser';
+import { useEffect, useState, useMemo } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { PuzzleEngine, PuzzleState } from '@usbi/engine';
-import { PuzzleScene } from './PuzzleScene';
 import { Card, CardTitle } from '../../components/ui/Card';
-import { PhaserGame, IRefPhaserGame } from '../../lib/PhaserGame';
+import { Reorder } from 'framer-motion';
+
+const COLORS = [
+  'bg-red-500', 'bg-blue-500', 'bg-green-500', 'bg-yellow-500', 
+  'bg-purple-500', 'bg-pink-500', 'bg-indigo-500', 'bg-teal-500'
+];
 
 interface PuzzleGameProps {
-  imageUrl: string;
-  gridSize?: number;
+  phrase: string;
+  pieces?: number;
   seed?: number;
   onFinish?: (score: number) => void;
 }
 
-export function PuzzleGame({ imageUrl, gridSize = 3, seed = 1234, onFinish }: PuzzleGameProps) {
-  const phaserRef = useRef<IRefPhaserGame | null>(null);
-
-  const engine = useMemo(() => new PuzzleEngine(gridSize, seed), [gridSize, seed]);
+export function PuzzleGame({ phrase, pieces = 3, seed = 1234, onFinish }: PuzzleGameProps) {
+  const engine = useMemo(() => new PuzzleEngine(phrase, pieces, seed), [phrase, pieces, seed]);
   const [state, setState] = useState<PuzzleState>(() => engine.getState());
+  const [items, setItems] = useState(state.pieces);
+
+  useEffect(() => {
+    setItems(state.pieces);
+  }, [state.pieces]);
 
   useEffect(() => {
     const setup = async () => {
@@ -31,11 +37,13 @@ export function PuzzleGame({ imageUrl, gridSize = 3, seed = 1234, onFinish }: Pu
     };
     setup();
 
-    // Set initial state from engine
     setState({ ...engine.getState() });
 
     const unsubscribe = engine.subscribe((newState) => {
       setState({ ...newState });
+      if (newState.isFinished && onFinish) {
+        onFinish(newState.score);
+      }
     });
 
     return () => {
@@ -52,42 +60,55 @@ export function PuzzleGame({ imageUrl, gridSize = 3, seed = 1234, onFinish }: Pu
       };
       teardown();
     };
-  }, [engine]);
+  }, [engine, onFinish]);
 
-  const gameConfig: Phaser.Types.Core.GameConfig = useMemo(() => ({
-    type: Phaser.AUTO,
-    width: 600,
-    height: 600,
-    backgroundColor: '#ffffff',
-    scene: [PuzzleScene],
-    scale: {
-      mode: Phaser.Scale.FIT,
-      autoCenter: Phaser.Scale.CENTER_BOTH,
-    },
-  }), []);
-
-  // This callback is guaranteed to fire after Phaser is ready
-  const handleGameReady = useCallback((game: Phaser.Game) => {
-    game.scene.start('PuzzleScene', { engine, onFinish, imageUrl });
-  }, [engine, onFinish, imageUrl]);
-
+  const handleReorder = (newItems: any[]) => {
+    // Only dispatch reorder to engine when drag ends or logic triggers update
+    // For simplicity, we just diff the first difference
+    const diffIndex = items.findIndex((p, i) => p.id !== newItems[i]?.id);
+    if (diffIndex !== -1) {
+      const movedPiece = items[diffIndex];
+      const newIndex = newItems.findIndex(p => p.id === movedPiece.id);
+      if (newIndex !== -1 && !state.isFinished) {
+         engine.reorderPieces(diffIndex, newIndex);
+      }
+    }
+  };
 
   return (
-    <Card className="w-full max-w-2xl mx-auto mt-8 flex flex-col items-center p-6 gap-6">
-      <CardTitle className="text-2xl">Rompecabezas</CardTitle>
+    <Card className="w-full max-w-4xl mx-auto mt-8 flex flex-col items-center p-6 gap-6">
+      <CardTitle className="text-2xl">Mensaje Secreto</CardTitle>
 
       <div className="flex gap-4 items-center">
         <p className="font-bold text-lg text-gray-700 dark:text-gray-300">Movimientos: {state.moves}</p>
         <p className="font-bold text-lg text-[--color-primary]">Puntuación: {state.score}</p>
       </div>
 
-      <div className="w-[600px] h-[600px] border-4 border-[--color-border] rounded-xl overflow-hidden shadow-lg relative">
-         <PhaserGame ref={phaserRef} config={gameConfig} onGameReady={handleGameReady} />
+      <div className="w-full min-h-[200px] border-4 border-[--color-border] rounded-xl p-4 bg-gray-50 shadow-inner overflow-x-auto">
+        <Reorder.Group 
+          axis="x" 
+          values={items} 
+          onReorder={handleReorder} 
+          className="flex flex-wrap gap-2 justify-center"
+        >
+          {items.map((piece) => {
+            const colorClass = COLORS[piece.originalIndex % COLORS.length];
+            return (
+              <Reorder.Item 
+                key={piece.id} 
+                value={piece}
+                className={`px-4 py-3 rounded-lg shadow-md cursor-grab active:cursor-grabbing text-white font-bold text-xl select-none flex-shrink-0 ${colorClass}`}
+              >
+                {piece.text}
+              </Reorder.Item>
+            );
+          })}
+        </Reorder.Group>
       </div>
 
       {state.isFinished && (
         <div className="p-4 bg-green-100 text-green-800 rounded-xl font-bold text-center animate-bounce text-xl mt-4">
-          ¡Felicidades, completaste el rompecabezas!
+          ¡Felicidades, descubriste el mensaje!
         </div>
       )}
     </Card>

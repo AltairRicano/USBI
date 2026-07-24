@@ -26,15 +26,17 @@ export const MemoryGame: React.FC<MemoryGameProps> = ({ pairs, backColor = DEFAU
     const flipped = engine.flipCard(index);
     if (!flipped) return;
     
-    setCards([...engine.getCards()]);
+    // We deep clone or force re-render by doing this so React sees the new object references.
+    // Actually, just mapping to a new array of objects ensures React sees the changes before checkMatch mutates them.
+    setCards(engine.getCards().map(c => ({...c})));
 
-    const result = engine.checkMatch();
-    if (result) {
+    if (engine.getFlippedCount() === 2) {
       setIsProcessing(true);
       setTimeout(() => {
+        const result = engine.checkMatch();
         setCards([...engine.getCards()]);
         setIsProcessing(false);
-        if (result.gameOver) {
+        if (result && result.gameOver) {
           // Score logic can be improved. Passing a generic maxScore as total pairs.
           onComplete(pairs.length, pairs.length);
         }

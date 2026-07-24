@@ -158,7 +158,7 @@ export function OfficialLevelPage() {
             />
           )}
           {level.template_type === 'puzzle' && puzzle && (
-            <PuzzleGame imageUrl={puzzle.imageUrl} gridSize={puzzle.gridSize} seed={puzzle.seed} onFinish={finishLevel} />
+            <PuzzleGame phrase={puzzle.phrase} pieces={puzzle.pieces} seed={puzzle.seed} onFinish={finishLevel} />
           )}
           {level.template_type === 'crossword' && crosswordWords.length >= 2 && (
             <CrosswordGame words={crosswordWords} onFinish={finishLevel} />

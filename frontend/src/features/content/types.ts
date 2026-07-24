@@ -155,17 +155,13 @@ export function normalizeWordSearchContent(content: unknown): { words: string[];
   };
 }
 
-export function normalizePuzzleContent(content: unknown): { imageUrl: string; gridSize?: number; seed?: number } | null {
-  const data = content as { imageUrl?: unknown; image_url?: unknown; gridSize?: unknown; grid_size?: unknown; seed?: unknown };
-  const imageUrl = typeof data?.imageUrl === 'string'
-    ? data.imageUrl
-    : typeof data?.image_url === 'string'
-      ? data.image_url
-      : '';
-  if (!imageUrl) return null;
+export function normalizePuzzleContent(content: unknown): { phrase: string; pieces?: number; seed?: number } | null {
+  const data = content as { phrase?: unknown; pieces?: unknown; seed?: unknown };
+  const phrase = typeof data?.phrase === 'string' ? data.phrase : '';
+  if (!phrase) return null;
   return {
-    imageUrl,
-    gridSize: typeof data?.gridSize === 'number' ? data.gridSize : typeof data?.grid_size === 'number' ? data.grid_size : undefined,
+    phrase,
+    pieces: typeof data?.pieces === 'number' ? data.pieces : undefined,
     seed: typeof data?.seed === 'number' ? data.seed : undefined,
   };
 }

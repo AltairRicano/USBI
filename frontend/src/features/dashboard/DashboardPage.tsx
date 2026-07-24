@@ -98,7 +98,7 @@ function LocalContentSection({ navigate }: { navigate: NavigateFunction }) {
   };
 
   return (
-    <section className="rounded-lg bg-[--color-card] text-[--color-text-card] p-6 shadow-sm border border-[--color-border] mt-6">
+    <section className="rounded-lg bg-[--color-card] text-[--color-text-card] p-6 shadow-sm border border-[--color-border]">
       <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
         <h2 className="text-xl font-semibold text-[--color-primary]">Tus niveles locales (Maker)</h2>
         <div className="flex gap-2">
@@ -296,6 +296,8 @@ export default function DashboardPage() {
   const navigate = useNavigate();
   const { theme, setTheme } = useSettingsStore();
   const canManageContent = user?.role === 'admin' || user?.role === 'operator' || user?.role === 'director';
+  
+  const [activeTab, setActiveTab] = useState<'public' | 'local'>('public');
 
   const dashboardQuery = useQuery({
     queryKey: ['dashboard'],
@@ -329,7 +331,6 @@ export default function DashboardPage() {
             </h1>
           </div>
           <div className="flex items-center gap-4">
-
             <Button variant="outline" size="sm" onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}>
               {theme === 'dark' ? '☀️ Modo Claro' : '🌙 Modo Oscuro'}
             </Button>
@@ -349,28 +350,53 @@ export default function DashboardPage() {
 
         {error && <p className="rounded border border-[--color-error] bg-[--color-card] p-3 text-[--color-error]">{error}</p>}
 
-        <section className="rounded-lg bg-[--color-card] text-[--color-text-card] p-6 shadow-sm" aria-label="Secciones oficiales">
-          <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
-            <h2 className="text-xl font-semibold">Secciones oficiales</h2>
-            {canManageContent && (
-              <Button variant="outline" size="sm" onClick={() => navigate('/admin')}>
-                Crear contenido
-              </Button>
-            )}
-          </div>
-          <div className="flex flex-col gap-6">
-            {sections.map((section) => (
-              <SectionAccordionItem key={section.id} section={section} navigate={navigate} />
-            ))}
-            {sections.length === 0 && (
-              <p className="rounded-lg border border-[--color-border] bg-[--color-card] p-5 text-[--color-muted]">
-                No hay secciones publicadas.
-              </p>
-            )}
-          </div>
-        </section>
+        <div className="flex bg-[--color-surface] rounded-full p-1 border border-[--color-border] w-max shadow-inner mx-auto mb-8">
+          <button
+            onClick={() => setActiveTab('public')}
+            className={`px-8 py-2 rounded-full font-bold transition-all duration-200 ${
+              activeTab === 'public'
+                ? 'bg-black text-white dark:bg-white dark:text-black shadow-md'
+                : 'text-[--color-muted] hover:text-[--color-text]'
+            }`}
+          >
+            Públicos
+          </button>
+          <button
+            onClick={() => setActiveTab('local')}
+            className={`px-8 py-2 rounded-full font-bold transition-all duration-200 ${
+              activeTab === 'local'
+                ? 'bg-black text-white dark:bg-white dark:text-black shadow-md'
+                : 'text-[--color-muted] hover:text-[--color-text]'
+            }`}
+          >
+            Míos
+          </button>
+        </div>
 
-        <LocalContentSection navigate={navigate} />
+        {activeTab === 'public' ? (
+          <section className="rounded-lg bg-[--color-card] text-[--color-text-card] p-6 shadow-sm" aria-label="Secciones oficiales">
+            <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
+              <h2 className="text-xl font-semibold">Secciones oficiales</h2>
+              {canManageContent && (
+                <Button variant="outline" size="sm" onClick={() => navigate('/admin')}>
+                  Crear contenido
+                </Button>
+              )}
+            </div>
+            <div className="flex flex-col gap-6">
+              {sections.map((section) => (
+                <SectionAccordionItem key={section.id} section={section} navigate={navigate} />
+              ))}
+              {sections.length === 0 && (
+                <p className="rounded-lg border border-[--color-border] bg-[--color-card] p-5 text-[--color-muted]">
+                  No hay secciones publicadas.
+                </p>
+              )}
+            </div>
+          </section>
+        ) : (
+          <LocalContentSection navigate={navigate} />
+        )}
       </div>
     </main>
   );

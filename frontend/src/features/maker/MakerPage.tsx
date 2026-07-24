@@ -133,20 +133,20 @@ export const MakerPage = () => {
         <button 
           type="button" 
           onClick={() => navigate(-1)} 
-          className="absolute left-0 top-2 text-blue-600 hover:underline flex items-center gap-1 text-sm font-medium"
+          className="absolute left-0 top-2 hover:underline flex items-center gap-1 text-sm font-medium text-[--color-primary]"
         >
           ← Volver
         </button>
-        <h1 className="text-3xl font-bold text-[#18529D]">Maker Local — Creación de Niveles</h1>
-        <p className="text-sm text-gray-500 mt-1">
+        <h1 className="text-3xl font-bold text-[--color-primary]">Maker Local — Creación de Niveles</h1>
+        <p className="text-sm text-[--color-muted] mt-1">
           Crea niveles de prueba. Puedes guardarlos en tu navegador (Crear) o exportarlos como archivo JSON a tu computadora (Exportar).
         </p>
       </header>
 
-      <div className="space-y-6 bg-white p-6 rounded-lg shadow-sm">
+      <div className="space-y-6 bg-[--color-surface] text-[--color-foreground] border border-[--color-border] p-6 rounded-lg shadow-sm">
         {/* ── Metadata ──────────────────────────────────────────────────── */}
-        <fieldset className="border rounded-lg p-4 space-y-4">
-          <legend className="text-sm font-semibold text-[#18529D] px-1">Metadatos del Nivel</legend>
+        <fieldset className="border border-[--color-border] rounded-lg p-4 space-y-4">
+          <legend className="text-sm font-semibold px-1 text-[--color-primary]">Metadatos del Nivel</legend>
 
           <div className="space-y-1">
             <label htmlFor="maker-title" className="block text-sm font-medium">Título</label>
@@ -154,7 +154,7 @@ export const MakerPage = () => {
               id="maker-title" 
               value={metadata.title}
               onChange={(e) => setMetadata({ ...metadata, title: e.target.value })}
-              className="w-full p-2 border rounded" 
+              className="w-full p-2 border border-[--color-border] bg-[--color-surface] text-[--color-foreground] rounded focus:outline-none focus:ring-2 focus:ring-[--color-primary]" 
               placeholder="Ej: Capitales de América" 
             />
           </div>
@@ -165,7 +165,7 @@ export const MakerPage = () => {
               id="maker-author" 
               value={metadata.author}
               onChange={(e) => setMetadata({ ...metadata, author: e.target.value })}
-              className="w-full p-2 border rounded" 
+              className="w-full p-2 border border-[--color-border] bg-[--color-surface] text-[--color-foreground] rounded focus:outline-none focus:ring-2 focus:ring-[--color-primary]" 
               placeholder="Tu nombre o alias" 
             />
           </div>
@@ -179,7 +179,7 @@ export const MakerPage = () => {
                 min="1" max="10" 
                 value={metadata.difficulty}
                 onChange={(e) => setMetadata({ ...metadata, difficulty: parseInt(e.target.value, 10) || 1 })}
-                className="w-full p-2 border rounded" 
+                className="w-full p-2 border border-[--color-border] bg-[--color-surface] text-[--color-foreground] rounded focus:outline-none focus:ring-2 focus:ring-[--color-primary]" 
               />
             </div>
             <div className="space-y-1">
@@ -189,7 +189,7 @@ export const MakerPage = () => {
                 type="color" 
                 value={metadata.color}
                 onChange={(e) => setMetadata({ ...metadata, color: e.target.value })}
-                className="w-full h-10 p-1 border rounded cursor-pointer" 
+                className="w-full h-10 p-1 border border-[--color-border] bg-[--color-surface] rounded cursor-pointer" 
               />
             </div>
           </div>
@@ -200,7 +200,7 @@ export const MakerPage = () => {
               id="maker-template" 
               value={metadata.template_type}
               onChange={handleTemplateChange}
-              className="w-full p-2 border rounded bg-[--color-card]"
+              className="w-full p-2 border border-[--color-border] rounded bg-[--color-surface] text-[--color-foreground] focus:outline-none focus:ring-2 focus:ring-[--color-primary]"
             >
               <option value="trivia">Trivia</option>
               <option value="crossword">Crucigrama</option>
@@ -214,13 +214,13 @@ export const MakerPage = () => {
         </fieldset>
 
         {/* ── Dynamic content ───────────────────────────────────────────── */}
-        <fieldset className="border rounded-lg p-4 space-y-3">
+        <fieldset className="border border-[--color-border] rounded-lg p-4 space-y-3">
           <div className="flex justify-between items-center mb-4">
-            <legend className="text-sm font-semibold text-[#18529D] px-1">Contenido del Nivel</legend>
+            <legend className="text-sm font-semibold px-1 text-[--color-primary]">Contenido del Nivel</legend>
             <button 
               type="button"
               onClick={() => setShowPreview(!showPreview)} 
-              className="text-sm text-blue-600 hover:underline cursor-pointer"
+              className="text-sm hover:underline cursor-pointer text-[--color-primary]"
             >
               {showPreview ? 'Ocultar Previsualización' : 'Mostrar Previsualización'}
             </button>
@@ -237,14 +237,14 @@ export const MakerPage = () => {
 
         {/* ── Status & Submit ───────────────────────────────────────────── */}
         {exportStatus === 'success' && (
-          <p className="text-[#28AD56] font-medium text-sm">✓ Operación realizada exitosamente.</p>
+          <p className="text-green-600 dark:text-green-400 font-medium text-sm">✓ Operación realizada exitosamente.</p>
         )}
         {exportStatus === 'error' && (
-          <p className="text-red-600 font-medium text-sm">✗ Error. Revisa que el título no esté vacío y que no haya errores de validación en el contenido.</p>
+          <p className="text-red-600 dark:text-red-400 font-medium text-sm">✗ Error. Revisa que el título no esté vacío y que no haya errores de validación en el contenido.</p>
         )}
         {errors && (
-          <div className="p-3 bg-red-50 text-red-600 rounded text-sm overflow-auto max-h-32">
-            La configuración del nivel contiene errores (revisa los campos en rojo).
+          <div className="p-3 bg-red-50 dark:bg-red-900/30 text-red-600 dark:text-red-400 border border-red-200 dark:border-red-800 rounded text-sm overflow-auto max-h-32">
+            La configuración del nivel contiene errores (revisa los campos).
           </div>
         )}
 
@@ -252,7 +252,7 @@ export const MakerPage = () => {
           <button 
             type="button"
             onClick={saveLocal}
-            className="flex-1 bg-blue-600 text-white px-6 py-3 rounded font-medium hover:bg-blue-700 transition-colors"
+            className="flex-1 bg-[--color-primary] text-white px-6 py-3 rounded font-medium hover:bg-[--color-primary-hover] transition-colors"
           >
             Crear (Guardar en Local)
           </button>

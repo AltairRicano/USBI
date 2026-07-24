@@ -82,6 +82,18 @@ html.dark {
     line-height: 1.5;
   }
 
+  #root {
+    min-height: 100vh;
+  }
+
+  .color-filter-defs {
+    position: absolute;
+    width: 0;
+    height: 0;
+    overflow: hidden;
+    pointer-events: none;
+  }
+
   /* Foco visible obligatorio (WCAG 2.4.11) */
   :focus-visible {
     outline: 3px solid var(--color-primary);
@@ -120,13 +132,25 @@ html.dark {
 }
 
 /* ── Filtros de accesibilidad daltónica (RNF16) ─────────────
-   Se activan mediante class en <html> vía AuthStore / Zustand  */
-html.deuteranopia {
-  filter: url('#deuteranopia-filter');
+   Se activan mediante class en <html> vía SettingsStore / Zustand  */
+html.deuteranopia #root {
+  filter: contrast(1.06) saturate(0.78) hue-rotate(-12deg);
 }
-html.protanopia {
-  filter: url('#protanopia-filter');
+html.protanopia #root {
+  filter: contrast(1.08) saturate(0.82) hue-rotate(8deg);
 }
-html.tritanopia {
-  filter: url('#tritanopia-filter');
+html.tritanopia #root {
+  filter: contrast(1.06) saturate(0.85) hue-rotate(28deg);
+}
+
+@supports (filter: url("#deuteranopia-filter")) {
+  html.deuteranopia #root {
+    filter: url("#deuteranopia-filter") contrast(1.03);
+  }
+  html.protanopia #root {
+    filter: url("#protanopia-filter") contrast(1.03);
+  }
+  html.tritanopia #root {
+    filter: url("#tritanopia-filter") contrast(1.03);
+  }
 }

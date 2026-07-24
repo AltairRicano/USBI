@@ -2,6 +2,10 @@
 
 Monorepo local de la plataforma USBI.
 
+Licencia: Apache 2.0. Consulta [LICENSE](LICENSE).
+
+Guía de despliegue funcional: [DEPLOYMENT.md](DEPLOYMENT.md).
+
 ## Backend local
 
 1. Copia `backend/.env.local.example` a `backend/.env.local` y ajusta secretos.

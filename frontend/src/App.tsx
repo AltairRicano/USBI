@@ -13,6 +13,7 @@ const SectionLevelsPage = lazy(() => import('./features/content/SectionLevelsPag
 const ProfilePage = lazy(() => import('./features/profile/ProfilePage').then((mod) => ({ default: mod.ProfilePage })));
 const ArcoRequestPage = lazy(() => import('./features/arco/ArcoPage').then((mod) => ({ default: mod.ArcoRequestPage })));
 const ArcoAdminPage = lazy(() => import('./features/arco/ArcoPage').then((mod) => ({ default: mod.ArcoAdminPage })));
+const LocalLevelPage = lazy(() => import('./features/content/LocalLevelPage').then((mod) => ({ default: mod.LocalLevelPage })));
 
 export default function App() {
   return (
@@ -77,6 +78,14 @@ export default function App() {
             element={
               <ProtectedRoute>
                 <OfficialLevelPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/local-play/:levelId"
+            element={
+              <ProtectedRoute>
+                <LocalLevelPage />
               </ProtectedRoute>
             }
           />

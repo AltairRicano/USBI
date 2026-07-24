@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useAuthStore } from '../../stores/useAuthStore';
 import { useSettingsStore } from '../../stores/useSettingsStore';
@@ -8,6 +8,141 @@ import { useNavigate, NavigateFunction } from 'react-router-dom';
 import type { SectionDTO, SectionsResponse, LevelsPageDTO, TemplateType } from '../content/types';
 import { clearSecureSession } from '../../lib/secureSession';
 import { useSyncStore } from '../../stores/useSyncStore';
+
+function LocalContentSection({ navigate }: { navigate: NavigateFunction }) {
+  const [localLevels, setLocalLevels] = useState<any[]>([]);
+
+  useEffect(() => {
+    const loadLocal = () => {
+      const stored = localStorage.getItem('usbi_local_levels');
+      if (stored) {
+        setLocalLevels(JSON.parse(stored));
+      }
+    };
+    loadLocal();
+    window.addEventListener('storage', loadLocal);
+    return () => window.removeEventListener('storage', loadLocal);
+  }, []);
+
+  const handleImport = async () => {
+    try {
+      if (window.__TAURI__) {
+        const { open } = await import('@tauri-apps/plugin-dialog');
+        const { readTextFile } = await import('@tauri-apps/plugin-fs');
+        const selected = await open({
+          filters: [{ name: 'USBI Level', extensions: ['json'] }],
+        });
+        if (selected && typeof selected === 'string') {
+          const content = await readTextFile(selected);
+          processImportedJSON(content);
+        }
+      } else {
+        const input = document.createElement('input');
+        input.type = 'file';
+        input.accept = 'application/json';
+        input.onchange = (e: any) => {
+          const file = e.target.files[0];
+          if (!file) return;
+          const reader = new FileReader();
+          reader.onload = (re) => {
+            if (typeof re.target?.result === 'string') {
+              processImportedJSON(re.target.result);
+            }
+          };
+          reader.readAsText(file);
+        };
+        input.click();
+      }
+    } catch (e) {
+      console.error('Error importing:', e);
+      alert('Hubo un error al importar el archivo.');
+    }
+  };
+
+  const processImportedJSON = (jsonStr: string) => {
+    try {
+      // Validar 5MB de tamaño (string length es buena aproximación para bytes en utf-8 ascii)
+      if (jsonStr.length > 5 * 1024 * 1024) {
+        alert('El archivo supera el límite de 5MB permitido por seguridad.');
+        return;
+      }
+      const data = JSON.parse(jsonStr);
+      if (!data?.metadata?.id) {
+        alert('Archivo inválido. No se encontraron metadatos válidos de un nivel.');
+        return;
+      }
+      
+      const stored = localStorage.getItem('usbi_local_levels');
+      const levels = stored ? JSON.parse(stored) : [];
+      const existingIdx = levels.findIndex((l: any) => l.metadata.id === data.metadata.id);
+      
+      if (existingIdx >= 0) {
+        levels[existingIdx] = data;
+      } else {
+        levels.push(data);
+      }
+      
+      localStorage.setItem('usbi_local_levels', JSON.stringify(levels));
+      setLocalLevels(levels);
+      alert('¡Nivel importado exitosamente!');
+    } catch (e) {
+      alert('Archivo inválido. No es un JSON correcto.');
+    }
+  };
+
+  const handleDelete = (id: string) => {
+    if (!confirm('¿Estás seguro de eliminar este nivel local?')) return;
+    const filtered = localLevels.filter(l => l.metadata.id !== id);
+    localStorage.setItem('usbi_local_levels', JSON.stringify(filtered));
+    setLocalLevels(filtered);
+  };
+
+  return (
+    <section className="rounded-lg bg-[--color-card] text-[--color-text-card] p-6 shadow-sm border border-[--color-border] mt-6">
+      <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
+        <h2 className="text-xl font-semibold text-[--color-primary]">Tus niveles locales (Maker)</h2>
+        <div className="flex gap-2">
+          <Button variant="outline" size="sm" onClick={() => navigate('/maker')}>
+            + Crear nuevo
+          </Button>
+          <Button variant="outline" size="sm" onClick={handleImport}>
+            📥 Importar
+          </Button>
+        </div>
+      </div>
+      
+      {localLevels.length === 0 ? (
+        <p className="text-[--color-muted] text-sm bg-black/5 dark:bg-white/5 p-4 rounded-lg">
+          No tienes niveles locales. Puedes crear uno o importar un archivo JSON.
+        </p>
+      ) : (
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+          {localLevels.map((lvl: any) => (
+            <div key={lvl.metadata.id} className="border border-[--color-border] p-4 rounded-lg flex flex-col gap-2 relative bg-black/5 dark:bg-white/5">
+              <button 
+                onClick={() => handleDelete(lvl.metadata.id)} 
+                className="absolute top-2 right-2 text-red-500 hover:text-red-700 font-bold"
+                title="Eliminar nivel"
+              >
+                ✕
+              </button>
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-full flex items-center justify-center text-white" style={{ backgroundColor: lvl.metadata.color || '#4caf50' }}>
+                  <TemplateIcon type={lvl.metadata.template_type} />
+                </div>
+                <h3 className="font-bold truncate pr-6" title={lvl.metadata.title}>{lvl.metadata.title}</h3>
+              </div>
+              <p className="text-xs text-[--color-muted]">Tipo: {lvl.metadata.template_type} | Dif: {lvl.metadata.difficulty}</p>
+              <Button size="sm" variant="primary" className="mt-2 w-full" onClick={() => navigate(`/local-play/${lvl.metadata.id}`)}>
+                Jugar local
+              </Button>
+            </div>
+          ))}
+        </div>
+      )}
+    </section>
+  );
+}
 
 function TemplateIcon({ type }: { type: TemplateType }) {
   switch (type) {
@@ -234,6 +369,8 @@ export default function DashboardPage() {
             )}
           </div>
         </section>
+
+        <LocalContentSection navigate={navigate} />
       </div>
     </main>
   );

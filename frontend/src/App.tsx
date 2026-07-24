@@ -1,6 +1,7 @@
 import { lazy, Suspense, useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Navigate, useNavigate } from 'react-router-dom';
 import { ProtectedRoute } from './features/auth/ProtectedRoute';
+import { useSettingsStore } from './stores/useSettingsStore';
 
 const LoginPage = lazy(() => import('./features/auth/LoginPage'));
 const RegisterPage = lazy(() => import('./features/auth/RegisterPage'));
@@ -16,6 +17,22 @@ const ArcoAdminPage = lazy(() => import('./features/arco/ArcoPage').then((mod) =
 const LocalLevelPage = lazy(() => import('./features/content/LocalLevelPage').then((mod) => ({ default: mod.LocalLevelPage })));
 
 export default function App() {
+  const { theme, colorBlindFilter } = useSettingsStore();
+
+  useEffect(() => {
+    const html = document.documentElement;
+    if (theme === 'dark') {
+      html.classList.add('dark');
+    } else {
+      html.classList.remove('dark');
+    }
+    
+    html.classList.remove('deuteranopia', 'protanopia', 'tritanopia');
+    if (colorBlindFilter !== 'none') {
+      html.classList.add(colorBlindFilter);
+    }
+  }, [theme, colorBlindFilter]);
+
   return (
     <BrowserRouter>
       <AuthEventBridge />

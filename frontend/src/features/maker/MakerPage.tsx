@@ -1,4 +1,4 @@
-import { useState, useEffect, type ComponentType, type ChangeEvent } from 'react';
+import { useMemo, useState, type ComponentType, type ChangeEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '../../components/ui/Button';
 import { levelTemplateRegistry } from '../content/maker/registry';
@@ -48,23 +48,20 @@ export const MakerPage = () => {
   });
 
   const [content, setContent] = useState<unknown>(() => levelTemplateRegistry['trivia'].getDefaults());
-  const [errors, setErrors] = useState<unknown>(null);
   const [showPreview, setShowPreview] = useState(false);
-
-  useEffect(() => {
+  const errors = useMemo<unknown>(() => {
     const schema = levelTemplateRegistry[metadata.template_type]?.schema;
     if (schema) {
       try {
         const result = schema.safeParse(content);
         if (!result.success) {
-          setErrors(result.error.format());
-        } else {
-          setErrors(null);
+          return result.error.format();
         }
-      } catch (err) {
-        setErrors({ _errors: ["Error interno de validación en la plantilla."] });
+      } catch {
+        return { _errors: ["Error interno de validación en la plantilla."] };
       }
     }
+    return null;
   }, [content, metadata.template_type]);
 
   const handleTemplateChange = (e: ChangeEvent<HTMLSelectElement>) => {

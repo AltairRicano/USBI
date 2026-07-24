@@ -9,6 +9,8 @@ import {
   type SnakeLadderContent,
 } from '../snakesLayout';
 
+type SnakeQuestion = NonNullable<SnakeLadderContent['questions']>[number];
+
 export function SnakeLadderForm({
   value,
   onChange,
@@ -22,12 +24,15 @@ export function SnakeLadderForm({
   const maxCount = maxFeatureCount(boardWidth, boardHeight);
   const snakeCount = Math.min(value.snakes?.length ?? 3, maxCount);
   const ladderCount = Math.min(value.ladders?.length ?? 3, maxCount);
-  const questions = value.questions || [];
+  const questions: SnakeQuestion[] = value.questions || [];
   const previewValue = normalizeContent(value, boardWidth, boardHeight, snakeCount, ladderCount, seed);
 
-  const addQuestion = () => onChange({ ...value, questions: [...questions, { question: '', options: ['', ''], correct_index: 0 }] });
-  const removeQuestion = (idx: number) => onChange({ ...value, questions: questions.filter((_: any, i: number) => i !== idx) });
-  const updateQuestion = (idx: number, updated: any) => {
+  const addQuestion = () => onChange({ ...value, questions: [...questions, createEmptyQuestion()] });
+  const removeQuestion = (idx: number) => {
+    if (questions.length <= 3) return;
+    onChange({ ...value, questions: questions.filter((_, i) => i !== idx) });
+  };
+  const updateQuestion = (idx: number, updated: SnakeQuestion) => {
     const next = [...questions];
     next[idx] = updated;
     onChange({ ...value, questions: next });
@@ -122,10 +127,11 @@ export function SnakeLadderForm({
           <Button onClick={addQuestion}>+ Agregar Pregunta</Button>
         </div>
         <div className="space-y-6">
-          {questions.map((q: any, idx: number) => (
+          {questions.map((q, idx) => (
             <div key={idx} className="p-4 border rounded-lg bg-gray-50 relative">
               <button 
                 onClick={() => removeQuestion(idx)} 
+                disabled={questions.length <= 3}
                 className="absolute top-2 right-2 text-red-500 hover:bg-red-50 p-2 rounded"
                 title="Eliminar pregunta"
               >X</button>
@@ -133,7 +139,7 @@ export function SnakeLadderForm({
                 <Input 
                   label={`Pregunta ${idx + 1}`} 
                   value={q.question} 
-                  onChange={(e: any) => updateQuestion(idx, { ...q, question: e.target.value })} 
+                  onChange={(e: ChangeEvent<HTMLInputElement>) => updateQuestion(idx, { ...q, question: e.target.value })} 
                   className="w-full"
                 />
               </div>
@@ -150,7 +156,7 @@ export function SnakeLadderForm({
                     <Input 
                       label=""
                       value={opt} 
-                      onChange={(e: any) => {
+                      onChange={(e: ChangeEvent<HTMLInputElement>) => {
                         const newOpts = [...q.options];
                         newOpts[optIdx] = e.target.value;
                         updateQuestion(idx, { ...q, options: newOpts });
@@ -158,7 +164,7 @@ export function SnakeLadderForm({
                     />
                     {q.options.length > 2 && (
                       <Button size="sm" variant="outline" onClick={() => {
-                        const newOpts = q.options.filter((_: any, i: number) => i !== optIdx);
+                        const newOpts = q.options.filter((_, i) => i !== optIdx);
                         const newCorrect = q.correct_index === optIdx ? 0 : (q.correct_index > optIdx ? q.correct_index - 1 : q.correct_index);
                         updateQuestion(idx, { ...q, options: newOpts, correct_index: newCorrect });
                       }}>X</Button>
@@ -202,6 +208,10 @@ function normalizeContent(
     ai_config: current.ai_config ?? { difficulty: 'MEDIUM' },
     questions: current.questions ?? [],
   };
+}
+
+function createEmptyQuestion(): SnakeQuestion {
+  return { question: '', options: ['', ''], correct_index: 0 };
 }
 
 function clampCount(value: number, max: number): number {

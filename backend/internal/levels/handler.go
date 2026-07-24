@@ -8,6 +8,7 @@ import (
 	"strconv"
 
 	"github.com/altair/usbi-backend/internal/domain"
+	"github.com/altair/usbi-backend/internal/httpjson"
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 )
@@ -28,7 +29,7 @@ func (h *Handler) CreateLevel(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var req CreateLevelRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err := httpjson.DecodeStrict(r.Body, &req); err != nil {
 		writeDecodeProblem(w, r, err)
 		return
 	}
@@ -120,7 +121,7 @@ func (h *Handler) UpdateLevel(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var req UpdateLevelRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err := httpjson.DecodeStrict(r.Body, &req); err != nil {
 		writeDecodeProblem(w, r, err)
 		return
 	}
@@ -206,7 +207,7 @@ func (h *Handler) CompleteLevel(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var req CompleteLevelRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err := httpjson.DecodeStrict(r.Body, &req); err != nil {
 		writeDecodeProblem(w, r, err)
 		return
 	}
@@ -242,7 +243,7 @@ func (h *Handler) CreateSection(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var req CreateSectionRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err := httpjson.DecodeStrict(r.Body, &req); err != nil {
 		writeDecodeProblem(w, r, err)
 		return
 	}
@@ -281,7 +282,7 @@ func (h *Handler) UpdateSection(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var req UpdateSectionRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err := httpjson.DecodeStrict(r.Body, &req); err != nil {
 		writeDecodeProblem(w, r, err)
 		return
 	}

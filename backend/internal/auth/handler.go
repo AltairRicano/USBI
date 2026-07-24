@@ -8,6 +8,7 @@ import (
 	"strconv"
 
 	"github.com/altair/usbi-backend/internal/domain"
+	"github.com/altair/usbi-backend/internal/httpjson"
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 )
@@ -25,7 +26,7 @@ func NewHandler(svc *Service) *Handler {
 // Register handles POST /api/v1/auth/register.
 func (h *Handler) Register(w http.ResponseWriter, r *http.Request) {
 	var req RegisterRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err := httpjson.DecodeStrict(r.Body, &req); err != nil {
 		writeDecodeProblem(w, r, err)
 		return
 	}
@@ -55,7 +56,7 @@ func (h *Handler) Register(w http.ResponseWriter, r *http.Request) {
 // Login handles POST /api/v1/auth/login.
 func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 	var req LoginRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err := httpjson.DecodeStrict(r.Body, &req); err != nil {
 		writeDecodeProblem(w, r, err)
 		return
 	}
@@ -92,7 +93,7 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) Refresh(w http.ResponseWriter, r *http.Request) {
 	var req RefreshRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err := httpjson.DecodeStrict(r.Body, &req); err != nil {
 		writeDecodeProblem(w, r, err)
 		return
 	}
@@ -121,7 +122,7 @@ func (h *Handler) Refresh(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) TutorConsent(w http.ResponseWriter, r *http.Request) {
 	var req TutorConsentRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err := httpjson.DecodeStrict(r.Body, &req); err != nil {
 		writeDecodeProblem(w, r, err)
 		return
 	}
@@ -199,7 +200,7 @@ func (h *Handler) Arco(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var req ArcoRequestDTO
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err := httpjson.DecodeStrict(r.Body, &req); err != nil {
 		writeDecodeProblem(w, r, err)
 		return
 	}
@@ -268,7 +269,7 @@ func (h *Handler) ResolveArco(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var req ResolveArcoRequestDTO
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err := httpjson.DecodeStrict(r.Body, &req); err != nil {
 		writeDecodeProblem(w, r, err)
 		return
 	}

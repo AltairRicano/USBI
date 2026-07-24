@@ -20,9 +20,9 @@ export const SnakesSchema = z.object({
   }).optional(),
   questions: z.array(z.object({
     question: z.string().min(1),
-    options: z.array(z.string()).min(2),
+    options: z.array(z.string()).min(2).max(4),
     correct_index: z.number().int().min(0)
-  })).optional(),
+  })).min(3).optional(),
 }).superRefine((data, ctx) => {
   const total_cells = data.board_width * data.board_height;
   if (data.end_position > total_cells) {
@@ -53,6 +53,27 @@ export const SnakesSchema = z.object({
       }
       origins.add(l.start);
     }
+  }
+
+  if (data.questions) {
+    data.questions.forEach((question, questionIndex) => {
+      if (question.correct_index >= question.options.length) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["questions", questionIndex, "correct_index"],
+          message: "Correct option index out of range",
+        });
+      }
+      question.options.forEach((option, optionIndex) => {
+        if (option.trim().length === 0) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: ["questions", questionIndex, "options", optionIndex],
+            message: "Option cannot be empty",
+          });
+        }
+      });
+    });
   }
 });
 export type Snakes = z.infer<typeof SnakesSchema>;

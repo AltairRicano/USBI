@@ -198,6 +198,12 @@ func TestValidateLevelInput_TemplateContracts(t *testing.T) {
 			wantErr:      true,
 		},
 		{
+			name:         "invalid puzzle unknown field",
+			templateType: "puzzle",
+			content:      json.RawMessage(`{"phrase":"Ordena esta frase","pieces":5,"gridSize":3}`),
+			wantErr:      true,
+		},
+		{
 			name:         "valid crossword",
 			templateType: "crossword",
 			content:      json.RawMessage(`{"words":[{"word":"catalogo","clue":"Busca materiales"},{"word":"cita","clue":"Referencia breve"}]}`),
@@ -224,6 +230,21 @@ func TestValidateLevelInput_TemplateContracts(t *testing.T) {
 			name:         "valid snakes ladders",
 			templateType: "snakes_ladders",
 			content:      json.RawMessage(`{"board_width":6,"board_height":6,"start_position":1,"end_position":36,"snakes":[{"start":29,"end":13}],"ladders":[{"start":4,"end":16}]}`),
+		},
+		{
+			name:         "valid snakes ladders with questions",
+			templateType: "snakes_ladders",
+			content: json.RawMessage(`{"board_width":6,"board_height":6,"start_position":1,"end_position":36,"ai_config":{"difficulty":"MEDIUM"},"questions":[
+				{"question":"Capital de Veracruz","options":["Xalapa","Cordoba"],"correct_index":0},
+				{"question":"Color institucional principal","options":["Azul","Rojo"],"correct_index":0},
+				{"question":"USBI es una","options":["Biblioteca","Cafeteria"],"correct_index":0}
+			]}`),
+		},
+		{
+			name:         "invalid snakes ladders needs three questions when present",
+			templateType: "snakes_ladders",
+			content:      json.RawMessage(`{"board_width":6,"board_height":6,"start_position":1,"end_position":36,"questions":[{"question":"Una","options":["A","B"],"correct_index":0}]}`),
+			wantErr:      true,
 		},
 		{
 			name:         "invalid snake must go down",

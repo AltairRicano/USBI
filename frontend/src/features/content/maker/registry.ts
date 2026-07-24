@@ -54,6 +54,11 @@ const snakeLadderDefaults = () => {
     snakes: links.snakes,
     ladders: links.ladders,
     ai_config: { difficulty: 'MEDIUM' },
+    questions: [
+      { question: '', options: ['', ''], correct_index: 0 },
+      { question: '', options: ['', ''], correct_index: 0 },
+      { question: '', options: ['', ''], correct_index: 0 },
+    ],
   };
 };
 

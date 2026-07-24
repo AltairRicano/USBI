@@ -1,6 +1,7 @@
 package levels
 
 import (
+	"bytes"
 	"context"
 	"database/sql"
 	"encoding/json"
@@ -12,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/altair/usbi-backend/internal/httpjson"
 	"github.com/altair/usbi-backend/internal/repository"
 	"github.com/google/uuid"
 	"github.com/sqlc-dev/pqtype"
@@ -668,9 +670,9 @@ func validateTriviaContent(content json.RawMessage) error {
 	}
 
 	var questions []question
-	if err := json.Unmarshal(content, &questions); err != nil {
+	if err := decodeStrictContent(content, &questions); err != nil {
 		var envelope questionEnvelope
-		if envelopeErr := json.Unmarshal(content, &envelope); envelopeErr != nil {
+		if envelopeErr := decodeStrictContent(content, &envelope); envelopeErr != nil {
 			return ErrValidation
 		}
 		questions = envelope.Questions
@@ -702,9 +704,10 @@ func validateMemoryContent(content json.RawMessage) error {
 		Color    string `json:"color,omitempty"`
 	}
 	var payload struct {
-		Pairs []pair `json:"pairs"`
+		BackColor string `json:"back_color,omitempty"`
+		Pairs     []pair `json:"pairs"`
 	}
-	if err := json.Unmarshal(content, &payload); err != nil || len(payload.Pairs) < 4 {
+	if err := decodeStrictContent(content, &payload); err != nil || len(payload.Pairs) < 4 {
 		return ErrValidation
 	}
 	for _, pair := range payload.Pairs {
@@ -727,7 +730,7 @@ func validateFakeNewsContent(content json.RawMessage) error {
 	var payload struct {
 		News []item `json:"news"`
 	}
-	if err := json.Unmarshal(content, &payload); err != nil || len(payload.News) == 0 {
+	if err := decodeStrictContent(content, &payload); err != nil || len(payload.News) == 0 {
 		return ErrValidation
 	}
 	for _, item := range payload.News {
@@ -748,7 +751,7 @@ func validateWordSearchContent(content json.RawMessage) error {
 		Height *int32   `json:"height,omitempty"`
 		Seed   *int32   `json:"seed,omitempty"`
 	}
-	if err := json.Unmarshal(content, &payload); err != nil || len(payload.Words) < 2 {
+	if err := decodeStrictContent(content, &payload); err != nil || len(payload.Words) < 2 {
 		return ErrValidation
 	}
 	for _, word := range payload.Words {
@@ -771,7 +774,7 @@ func validatePuzzleContent(content json.RawMessage) error {
 		Pieces *int32 `json:"pieces,omitempty"`
 		Seed   *int32 `json:"seed,omitempty"`
 	}
-	if err := json.Unmarshal(content, &payload); err != nil {
+	if err := decodeStrictContent(content, &payload); err != nil {
 		log.Printf("validatePuzzleContent unmarshal error: %v, content: %s", err, string(content))
 		return ErrValidation
 	}
@@ -794,7 +797,7 @@ func validateCrosswordContent(content json.RawMessage) error {
 	var payload struct {
 		Words []word `json:"words"`
 	}
-	if err := json.Unmarshal(content, &payload); err != nil || len(payload.Words) < 2 {
+	if err := decodeStrictContent(content, &payload); err != nil || len(payload.Words) < 2 {
 		return ErrValidation
 	}
 	words := make([]crosswordCandidate, 0, len(payload.Words))
@@ -1017,15 +1020,28 @@ func validateSnakesContent(content json.RawMessage) error {
 		Start int32 `json:"start"`
 		End   int32 `json:"end"`
 	}
-	var payload struct {
-		BoardWidth    int32  `json:"board_width"`
-		BoardHeight   int32  `json:"board_height"`
-		StartPosition int32  `json:"start_position"`
-		EndPosition   int32  `json:"end_position"`
-		Snakes        []item `json:"snakes,omitempty"`
-		Ladders       []item `json:"ladders,omitempty"`
+	type aiConfig struct {
+		Difficulty      string    `json:"difficulty"`
+		FailProbability *float64  `json:"fail_probability,omitempty"`
+		Weights         []float64 `json:"weights,omitempty"`
 	}
-	if err := json.Unmarshal(content, &payload); err != nil {
+	type question struct {
+		Question     string   `json:"question"`
+		Options      []string `json:"options"`
+		CorrectIndex int      `json:"correct_index"`
+	}
+	var payload struct {
+		BoardWidth    int32      `json:"board_width"`
+		BoardHeight   int32      `json:"board_height"`
+		StartPosition int32      `json:"start_position"`
+		EndPosition   int32      `json:"end_position"`
+		Seed          *int32     `json:"seed,omitempty"`
+		Snakes        []item     `json:"snakes,omitempty"`
+		Ladders       []item     `json:"ladders,omitempty"`
+		AIConfig      *aiConfig  `json:"ai_config,omitempty"`
+		Questions     []question `json:"questions,omitempty"`
+	}
+	if err := decodeStrictContent(content, &payload); err != nil {
 		return ErrValidation
 	}
 	totalCells := payload.BoardWidth * payload.BoardHeight
@@ -1052,7 +1068,42 @@ func validateSnakesContent(content json.RawMessage) error {
 		}
 		origins[ladder.Start] = struct{}{}
 	}
+	if payload.AIConfig != nil {
+		if payload.AIConfig.Difficulty != "EASY" && payload.AIConfig.Difficulty != "MEDIUM" && payload.AIConfig.Difficulty != "HARD" {
+			return ErrValidation
+		}
+		if payload.AIConfig.FailProbability != nil && (*payload.AIConfig.FailProbability < 0 || *payload.AIConfig.FailProbability > 1) {
+			return ErrValidation
+		}
+		for _, weight := range payload.AIConfig.Weights {
+			if weight < 0 {
+				return ErrValidation
+			}
+		}
+	}
+	if len(payload.Questions) > 0 {
+		if len(payload.Questions) < 3 {
+			return ErrValidation
+		}
+		for _, question := range payload.Questions {
+			if strings.TrimSpace(question.Question) == "" || len(question.Options) < 2 || len(question.Options) > 4 {
+				return ErrValidation
+			}
+			if question.CorrectIndex < 0 || question.CorrectIndex >= len(question.Options) {
+				return ErrValidation
+			}
+			for _, option := range question.Options {
+				if strings.TrimSpace(option) == "" {
+					return ErrValidation
+				}
+			}
+		}
+	}
 	return nil
+}
+
+func decodeStrictContent(content json.RawMessage, dst any) error {
+	return httpjson.DecodeStrict(bytes.NewReader(content), dst)
 }
 
 func positionInBoard(position, totalCells int32) bool {

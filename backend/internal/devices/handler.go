@@ -6,6 +6,7 @@ import (
 	"net/http"
 
 	"github.com/altair/usbi-backend/internal/domain"
+	"github.com/altair/usbi-backend/internal/httpjson"
 )
 
 type Handler struct {
@@ -24,7 +25,7 @@ func (h *Handler) RegisterDevice(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var req RegisterDeviceRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err := httpjson.DecodeStrict(r.Body, &req); err != nil {
 		writeDecodeProblem(w, r, err)
 		return
 	}

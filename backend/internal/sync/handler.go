@@ -1,12 +1,14 @@
 package sync
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"io"
 	"net/http"
 
 	"github.com/altair/usbi-backend/internal/domain"
+	"github.com/altair/usbi-backend/internal/httpjson"
 )
 
 // Handler exposes the sync HTTP endpoint.
@@ -41,7 +43,7 @@ func (h *Handler) SyncData(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var req domain.SyncEventRequest
-	if err := json.Unmarshal(rawBody, &req); err != nil {
+	if err := httpjson.DecodeStrict(bytes.NewReader(rawBody), &req); err != nil {
 		writeProblem(w, r, http.StatusBadRequest, "bad-request",
 			"Bad Request", "Invalid JSON payload")
 		return

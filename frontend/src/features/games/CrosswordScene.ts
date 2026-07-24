@@ -1,8 +1,8 @@
 import Phaser from 'phaser';
-import { CrosswordEngine, CrosswordState } from '@usbi/engine';
+import type { CrosswordEngine, CrosswordState } from '@usbi/engine';
 
 interface SceneData {
-  engine: CrosswordEngine;
+  engine?: CrosswordEngine;
   onFinish?: (score: number) => void;
 }
 
@@ -23,8 +23,8 @@ export class CrosswordScene extends Phaser.Scene {
   }
 
   init(data: SceneData) {
-    this.engine = data.engine;
-    this.onFinish = data.onFinish;
+    this.engine = data.engine ?? this.game.registry.get('crosswordEngine');
+    this.onFinish = data.onFinish ?? this.game.registry.get('crosswordOnFinish');
   }
 
   create() {
@@ -37,6 +37,17 @@ export class CrosswordScene extends Phaser.Scene {
       0xf8f9fa
     );
 
+    if (!this.engine) {
+      this.add.text(
+        this.cameras.main.width / 2,
+        this.cameras.main.height / 2,
+        'No se pudo iniciar el crucigrama',
+        { fontSize: '20px', color: '#666666', fontFamily: 'sans-serif' }
+      ).setOrigin(0.5);
+      return;
+    }
+
+    this.events.once(Phaser.Scenes.Events.SHUTDOWN, this.shutdown, this);
     this.highlightGraphics = this.add.graphics();
     const cells = this.engine.getGridCells();
 
@@ -60,8 +71,15 @@ export class CrosswordScene extends Phaser.Scene {
       if (c.y > maxY) maxY = c.y;
     });
 
-    const gridW = (maxX - minX + 1) * this.cellSize;
-    const gridH = (maxY - minY + 1) * this.cellSize;
+    const cols = maxX - minX + 1;
+    const rows = maxY - minY + 1;
+    const padding = 36;
+    const availableWidth = this.cameras.main.width - padding * 2;
+    const availableHeight = this.cameras.main.height - padding * 2;
+    this.cellSize = Math.max(28, Math.min(54, Math.floor(Math.min(availableWidth / cols, availableHeight / rows))));
+
+    const gridW = cols * this.cellSize;
+    const gridH = rows * this.cellSize;
 
     this.gridOffset.x = (this.cameras.main.width - gridW) / 2 - (minX * this.cellSize);
     this.gridOffset.y = (this.cameras.main.height - gridH) / 2 - (minY * this.cellSize);
@@ -78,7 +96,7 @@ export class CrosswordScene extends Phaser.Scene {
 
       const rect = this.add
         .rectangle(px + this.cellSize / 2, py + this.cellSize / 2, this.cellSize, this.cellSize, 0xffffff)
-        .setStrokeStyle(1, 0x333333)
+        .setStrokeStyle(2, 0x334155)
         .setInteractive({ cursor: 'pointer' });
 
       rect.on('pointerdown', () => {
@@ -87,8 +105,8 @@ export class CrosswordScene extends Phaser.Scene {
 
       const text = this.add
         .text(px + this.cellSize / 2, py + this.cellSize / 2, '', {
-          fontSize: '22px',
-          color: '#111111',
+          fontSize: `${Math.max(18, Math.floor(this.cellSize * 0.52))}px`,
+          color: '#0f172a',
           fontFamily: 'monospace',
           fontStyle: 'bold',
         })
@@ -102,7 +120,7 @@ export class CrosswordScene extends Phaser.Scene {
       const labelNum = wordStartLabels.get(key);
       if (labelNum !== undefined) {
         this.add.text(px + 2, py + 1, String(labelNum), {
-          fontSize: '10px',
+          fontSize: `${Math.max(9, Math.floor(this.cellSize * 0.24))}px`,
           color: '#555555',
           fontFamily: 'sans-serif',
         });

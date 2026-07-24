@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { CrosswordEngine } from './CrosswordEngine';
+import { canBuildConnectedCrossword, CrosswordEngine } from './CrosswordEngine';
 
 describe('CrosswordEngine', () => {
   const words = [
@@ -110,6 +110,19 @@ describe('CrosswordEngine', () => {
     expect(engine.getGridCells().length).toBe(0);
     const state = engine.getState();
     expect(state.isFinished).toBe(false); // Can't finish an empty crossword
+  });
+
+  it('should report words that cannot be connected', () => {
+    const disconnectedWords = [
+      { word: 'SI', clue: 'Palabra usada para afirmar' },
+      { word: 'NO', clue: 'Palabra usada para negar' },
+    ];
+    const engine = new CrosswordEngine(disconnectedWords);
+
+    expect(canBuildConnectedCrossword(disconnectedWords)).toBe(false);
+    expect(engine.isBuildComplete()).toBe(false);
+    expect(engine.getPlacedWords()).toHaveLength(1);
+    expect(engine.getUnplacedWords()).toHaveLength(1);
   });
 
   it('should normalize input', () => {

@@ -203,6 +203,18 @@ func TestValidateLevelInput_TemplateContracts(t *testing.T) {
 			wantErr:      true,
 		},
 		{
+			name:         "invalid crossword needs crossing words",
+			templateType: "crossword",
+			content:      json.RawMessage(`{"words":[{"word":"SI","clue":"Palabra usada para afirmar"},{"word":"NO","clue":"Palabra usada para negar"}]}`),
+			wantErr:      true,
+		},
+		{
+			name:         "invalid crossword rejects duplicate answers",
+			templateType: "crossword",
+			content:      json.RawMessage(`{"words":[{"word":"catalogo","clue":"Busca materiales"},{"word":"catálogo","clue":"Respuesta duplicada"}]}`),
+			wantErr:      true,
+		},
+		{
 			name:         "valid snakes ladders",
 			templateType: "snakes_ladders",
 			content:      json.RawMessage(`{"board_width":6,"board_height":6,"start_position":1,"end_position":36,"snakes":[{"start":29,"end":13}],"ladders":[{"start":4,"end":16}]}`),

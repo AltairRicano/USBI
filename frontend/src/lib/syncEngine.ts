@@ -1,5 +1,6 @@
 import { invoke } from '@tauri-apps/api/core';
 import { useSyncStore } from '../stores/useSyncStore';
+import { useAuthStore } from '../stores/useAuthStore';
 import { apiClient } from './apiClient';
 
 // ── Tipos que espeja exactamente el contrato del Backend Go ──────────────────
@@ -42,6 +43,8 @@ export interface SyncProgressResult {
 // ── Retry Policy: Retroceso exponencial + Jitter (RNF11) ────────────────────
 // Intentos 1→2→3: espera 1s→2s→4s con ±20% jitter
 
+import { isAxiosError } from 'axios';
+
 async function fetchWithRetry(
   url: string,
   data: SyncEventRequest,
@@ -52,6 +55,9 @@ async function fetchWithRetry(
     const response = await apiClient.post<SyncEventResponse>(url, data, { timeout: 30_000 });
     return response.data;
   } catch (error) {
+    if (isAxiosError(error) && error.response?.status === 401) {
+      throw error;
+    }
     if (attempt >= maxAttempts) throw error;
     const baseDelay = Math.pow(2, attempt - 1) * 1000;
     const jitter = baseDelay * 0.2 * (Math.random() * 2 - 1);
@@ -161,7 +167,12 @@ export async function syncLocalProgress(
     syncStore.recordSyncSuccess();
     return { completed: confirmedIds.length === requests.length, confirmedIds };
   } catch (error) {
-    console.error('[SyncEngine] Error durante sincronización:', error);
+    if (isAxiosError(error) && error.response?.status === 401) {
+      console.warn('[SyncEngine] Sesión caducada durante sincronización. Pausando y pidiendo re-autenticación.');
+      useAuthStore.getState().logout();
+    } else {
+      console.error('[SyncEngine] Error durante sincronización:', error);
+    }
     return { completed: false, confirmedIds };
   } finally {
     syncStore.setSyncing(false);

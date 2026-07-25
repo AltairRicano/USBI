@@ -3,8 +3,13 @@ package transport
 import (
 	"context"
 	"encoding/json"
+	"net"
 	"net/http"
+	"strings"
+	"sync"
 	"time"
+
+	"golang.org/x/time/rate"
 
 	"github.com/altair/usbi-backend/internal/auth"
 	"github.com/altair/usbi-backend/internal/crypto"
@@ -81,6 +86,7 @@ func SetupRoutes(r chi.Router, deps RouterDependencies) {
 		// ── Authenticated routes ──────────────────────────────────────────────
 		r.Group(func(r chi.Router) {
 			r.Use(jwtAuthMiddleware(deps.TokenCfg, deps.Queries))
+			r.Use(rateLimitMiddleware)
 
 			if deps.AuthHandler != nil {
 				r.Post("/auth/logout", deps.AuthHandler.Logout)
@@ -273,5 +279,68 @@ func writeProblem(w http.ResponseWriter, r *http.Request, status int, slug, titl
 		Status:   status,
 		Detail:   detail,
 		Instance: r.URL.Path,
+	})
+}
+
+type visitor struct {
+	limiter  *rate.Limiter
+	lastSeen time.Time
+}
+
+var (
+	visitors = make(map[string]*visitor)
+	mu       sync.Mutex
+)
+
+// Background routine to cleanup old visitors
+func init() {
+	go func() {
+		for {
+			time.Sleep(time.Minute)
+			mu.Lock()
+			for ip, v := range visitors {
+				if time.Since(v.lastSeen) > 3*time.Minute {
+					delete(visitors, ip)
+				}
+			}
+			mu.Unlock()
+		}
+	}()
+}
+
+func getVisitor(ip string) *rate.Limiter {
+	mu.Lock()
+	defer mu.Unlock()
+
+	v, exists := visitors[ip]
+	if !exists {
+		// allow 10 requests per second with burst of 20
+		limiter := rate.NewLimiter(10, 20)
+		visitors[ip] = &visitor{limiter, time.Now()}
+		return limiter
+	}
+	v.lastSeen = time.Now()
+	return v.limiter
+}
+
+func rateLimitMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ip, _, err := net.SplitHostPort(r.RemoteAddr)
+		if err != nil {
+			ip = r.RemoteAddr
+		}
+		
+		// If behind a proxy, use X-Forwarded-For
+		xff := r.Header.Get("X-Forwarded-For")
+		if xff != "" {
+			ip = strings.Split(xff, ",")[0]
+		}
+		
+		limiter := getVisitor(strings.TrimSpace(ip))
+		if !limiter.Allow() {
+			http.Error(w, `{"error":"too many requests"}`, http.StatusTooManyRequests)
+			return
+		}
+		next.ServeHTTP(w, r)
 	})
 }

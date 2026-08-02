@@ -2,6 +2,14 @@ import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import App from './App';
+// Self-hosted (audit finding C7): --font-sans declares 'Inter' but no
+// <link>/@font-face ever loaded it, so the app silently fell back to the
+// system font. @fontsource ships the actual .woff2 files bundled with the
+// app — no third-party font CDN request (privacy-relevant: this system
+// serves minors).
+import '@fontsource/inter/400.css';
+import '@fontsource/inter/500.css';
+import '@fontsource/inter/700.css';
 import './index.css';
 import { initLocalSyncQueue, syncLocalQueue } from './lib/localSyncQueue';
 import { useSyncStore } from './stores/useSyncStore';

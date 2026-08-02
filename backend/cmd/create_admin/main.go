@@ -5,20 +5,19 @@ import (
 	"database/sql"
 	"fmt"
 	"log"
-	"net/url"
-	"os"
 
+	"github.com/altair/usbi-backend/internal/audit"
 	"github.com/altair/usbi-backend/internal/auth"
+	"github.com/altair/usbi-backend/internal/config"
 	"github.com/altair/usbi-backend/internal/crypto"
 	"github.com/altair/usbi-backend/internal/repository"
-	"github.com/joho/godotenv"
 	_ "github.com/lib/pq"
 )
 
 func main() {
-	loadEnvironment()
+	config.LoadEnvironment()
 	ctx := context.Background()
-	dbURL := databaseURL()
+	dbURL := config.DatabaseURL()
 
 	db, err := sql.Open("postgres", dbURL)
 	if err != nil {
@@ -28,22 +27,28 @@ func main() {
 
 	queries := repository.New(db)
 	cfg := auth.Config{
-		EncryptionKey:    os.Getenv("PGP_ENCRYPTION_KEY"),
-		BlindIndexSecret: []byte(os.Getenv("BLIND_INDEX_SECRET")),
-		HMACSecret:       []byte(os.Getenv("HMAC_SECRET")),
+		EncryptionKey:    config.RequireSecret("PGP_ENCRYPTION_KEY"),
+		BlindIndexSecret: []byte(config.RequireSecret("BLIND_INDEX_SECRET")),
+		HMACSecret:       []byte(config.RequireSecret("HMAC_SECRET")),
 		TokenConfig: crypto.TokenConfig{
-			Secret: []byte(os.Getenv("JWT_SECRET")),
+			Secret: []byte(config.RequireSecret("JWT_SECRET")),
 		},
 	}
 
 	svc := auth.NewService(queries, cfg)
 
+	// Credentials come from the environment — never hardcoded. Without this the
+	// initial admin login would be public knowledge from the repository.
+	adminPassword := config.RequireEnv("ADMIN_PASSWORD")
+	if len(adminPassword) < 12 {
+		log.Fatalf("ADMIN_PASSWORD must be at least 12 characters (got %d)", len(adminPassword))
+	}
 	req := auth.RegisterRequest{
-		FullName:             "Admin USBI",
-		Email:                "admin@usbi.edu.mx",
-		Password:             "Password123!",
+		FullName:             config.GetEnv("ADMIN_FULL_NAME", "Admin USBI"),
+		Email:                config.RequireEnv("ADMIN_EMAIL"),
+		Password:             adminPassword,
 		IsAdult:              true,
-		PrivacyNoticeVersion: "v1.0",
+		PrivacyNoticeVersion: config.GetEnv("ADMIN_PRIVACY_NOTICE_VERSION", "v1.0"),
 	}
 
 	resp, err := svc.Register(ctx, req)
@@ -59,49 +64,18 @@ func main() {
 		log.Fatalf("Failed to promote: %v", err)
 	}
 
+	// No-Repudio: record the privilege escalation in the audit ledger (A3).
+	if err := audit.Log(ctx, queries, audit.Entry{
+		ActorID:    resp.UserID,
+		Action:     "admin.bootstrap",
+		EntityType: "user",
+		EntityID:   resp.UserID,
+		Before:     map[string]any{"role": "player"},
+		After:      map[string]any{"role": "admin"},
+		UserAgent:  "create_admin-cli",
+	}); err != nil {
+		log.Fatalf("Failed to write audit log: %v", err)
+	}
+
 	fmt.Println("Success! Admin user created.")
-}
-
-func loadEnvironment() {
-	if envFile := os.Getenv("USBI_BACKEND_ENV_FILE"); envFile != "" {
-		if err := godotenv.Load(envFile); err != nil {
-			log.Printf("[WARN] %s not found or unreadable — reading from system environment", envFile)
-		}
-		return
-	}
-	if err := godotenv.Load(); err != nil {
-		log.Println("[WARN] .env not found — reading from system environment")
-	}
-}
-
-func databaseURL() string {
-	if val := os.Getenv("DATABASE_URL"); val != "" {
-		return val
-	}
-
-	dsn := &url.URL{
-		Scheme: "postgres",
-		User:   url.UserPassword(requireEnv("DB_USER"), requireEnv("DB_PASSWORD")),
-		Host:   fmt.Sprintf("%s:%s", requireEnv("DB_HOST"), getEnv("DB_PORT", "5432")),
-		Path:   requireEnv("DB_NAME"),
-	}
-	query := dsn.Query()
-	query.Set("sslmode", getEnv("DB_SSLMODE", "disable"))
-	dsn.RawQuery = query.Encode()
-	return dsn.String()
-}
-
-func requireEnv(key string) string {
-	val := os.Getenv(key)
-	if val == "" {
-		log.Fatalf("%s is not set", key)
-	}
-	return val
-}
-
-func getEnv(key, fallback string) string {
-	if val := os.Getenv(key); val != "" {
-		return val
-	}
-	return fallback
 }

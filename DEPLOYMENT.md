@@ -121,6 +121,18 @@ server {
 }
 ```
 
+**Importante (hallazgo de auditoría B3):** este Nginx de ejemplo reenvía
+`X-Real-IP`/`X-Forwarded-For`, pero el backend por defecto **no confía** en esos
+encabezados (`TRUST_PROXY_HEADERS=false`). Si se despliega así tal cual, TODO el
+tráfico del sitio comparte la IP de loopback de Nginx en el rate limiter (diluyendo
+la protección de fuerza bruta) y en la IP legal registrada en `tutor_consents`. Con
+este Nginx delante, agrega `TRUST_PROXY_HEADERS=true` al `.env` del backend — pero
+**sólo** si Nginx es la única forma de llegar al puerto del backend (si el puerto
+8088/8080 fuera alcanzable directamente, cualquier cliente podría spoofear su propia
+IP inventando esos encabezados). El backend también loguea una advertencia si
+detecta que todas las IPs observadas son idénticas (señal de esta misma mala
+configuración).
+
 ## systemd
 
 ```ini
@@ -152,6 +164,9 @@ WantedBy=multi-user.target
 - `/health/live` responde `200`.
 - `/health/ready` responde `200` con PostgreSQL disponible.
 - Nginx sirve `frontend/dist` y proxifica `/api/v1`.
+- Si Nginx es la única vía de acceso al backend, `TRUST_PROXY_HEADERS=true` en el
+  `.env` del servidor (ver nota B3 en la sección Nginx arriba); si no, permanece
+  `false`.
 - Backups de PostgreSQL probados fuera del horario de uso.
 - Documentacion interna sensible separada antes de publicar el repositorio.
 

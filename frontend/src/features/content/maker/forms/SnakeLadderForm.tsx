@@ -129,7 +129,7 @@ export function SnakeLadderForm({
         <div className="flex justify-between items-center mb-4">
           <div>
             <h4 className="text-xl font-bold">Preguntas de Cultura General</h4>
-            <p className="text-sm text-gray-500">
+            <p className="text-sm text-[--color-muted]">
               Cada pregunta debe tener exactamente dos opciones. Mínimo {MIN_QUESTIONS} preguntas ({questions.length}/{MIN_QUESTIONS}).
             </p>
           </div>
@@ -138,12 +138,16 @@ export function SnakeLadderForm({
         <div className="space-y-6">
           {questions.map((q, idx) => (
             <div key={idx} className="p-4 border rounded-lg bg-gray-50 relative">
-              <button
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
                 onClick={() => removeQuestion(idx)}
                 disabled={questions.length <= MIN_QUESTIONS}
-                className="absolute top-2 right-2 text-red-500 hover:bg-red-50 p-2 rounded"
+                className="absolute top-2 right-2 text-red-500 hover:bg-red-50"
+                aria-label="Eliminar pregunta"
                 title="Eliminar pregunta"
-              >X</button>
+              >X</Button>
               <div className="mb-4 pr-8">
                 <Input
                   label={`Pregunta ${idx + 1}`}
@@ -156,12 +160,15 @@ export function SnakeLadderForm({
                 <p className="font-semibold text-sm">Opciones (marca la correcta):</p>
                 {q.options.map((opt: string, optIdx: number) => (
                   <div key={optIdx} className="flex gap-2 items-center">
-                    <input
-                      type="radio"
-                      name={`correct-${idx}`}
-                      checked={q.correct_index === optIdx}
-                      onChange={() => updateQuestion(idx, { ...q, correct_index: optIdx })}
-                    />
+                    <label className="flex items-center gap-1 p-2 cursor-pointer">
+                      <input
+                        type="radio"
+                        name={`correct-${idx}`}
+                        checked={q.correct_index === optIdx}
+                        onChange={() => updateQuestion(idx, { ...q, correct_index: optIdx })}
+                      />
+                      <span className="sr-only">Marcar opción {optIdx + 1} como correcta</span>
+                    </label>
                     <Input
                       label=""
                       value={opt}

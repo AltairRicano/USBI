@@ -18,8 +18,15 @@ export class WordSearchScene extends Phaser.Scene {
   private selectedCoords: { x: number, y: number }[] = [];
   private selectionGraphics!: Phaser.GameObjects.Graphics;
   private foundGraphics!: Phaser.GameObjects.Graphics;
-  
+  private cursorGraphics!: Phaser.GameObjects.Graphics;
+
   private isSelecting: boolean = false;
+
+  // Keyboard navigation (audit finding C4): word search was the only Phaser
+  // game with no keyboard path at all. Arrow keys move a visible cursor;
+  // Enter/Space marks the start and, pressed again, the end of a selection
+  // (mirroring the crossword's arrow-key + type pattern); Escape cancels.
+  private cursor: { x: number, y: number } = { x: 0, y: 0 };
 
   constructor() {
     super('WordSearchScene');
@@ -53,6 +60,7 @@ export class WordSearchScene extends Phaser.Scene {
 
     this.foundGraphics = this.add.graphics();
     this.selectionGraphics = this.add.graphics();
+    this.cursorGraphics = this.add.graphics();
 
     // Create grid
     for (let y = 0; y < height; y++) {
@@ -74,6 +82,8 @@ export class WordSearchScene extends Phaser.Scene {
     this.input.on('pointerdown', this.handlePointerDown, this);
     this.input.on('pointermove', this.handlePointerMove, this);
     this.input.on('pointerup', this.handlePointerUp, this);
+    this.input.keyboard!.on('keydown', this.handleKeyDown, this);
+    this.drawCursor();
 
     this.unsubscribeEngine = this.engine.subscribe((newState) => {
       this.redrawFound(newState.foundWords, newState.grid, newState.width, newState.height);
@@ -111,36 +121,107 @@ export class WordSearchScene extends Phaser.Scene {
     if (!this.isSelecting) return;
     const coord = this.getGridCoord(pointer.x, pointer.y);
     if (coord) {
-      const start = this.selectedCoords[0];
-      // Restrict to horizontal, vertical, or diagonal
-      const dx = coord.x - start.x;
-      const dy = coord.y - start.y;
-      
-      if (dx === 0 || dy === 0 || Math.abs(dx) === Math.abs(dy)) {
-        const steps = Math.max(Math.abs(dx), Math.abs(dy));
-        this.selectedCoords = [];
-        for (let i = 0; i <= steps; i++) {
-          const stepX = steps === 0 ? 0 : dx / steps;
-          const stepY = steps === 0 ? 0 : dy / steps;
-          this.selectedCoords.push({
-            x: start.x + stepX * i,
-            y: start.y + stepY * i
-          });
-        }
-        this.drawSelection();
-      }
+      this.extendSelectionTo(coord);
     }
   }
 
   private handlePointerUp() {
     if (this.isSelecting) {
-      this.isSelecting = false;
-      if (this.engine) {
-         this.engine.checkWord(this.selectedCoords);
-      }
-      this.selectedCoords = [];
-      this.selectionGraphics.clear();
+      this.submitSelection();
     }
+  }
+
+  // Extends the in-progress selection from its start toward `coord`, restricted
+  // to horizontal/vertical/diagonal lines (shared by mouse-drag and keyboard
+  // cursor movement while selecting).
+  private extendSelectionTo(coord: { x: number, y: number }) {
+    const start = this.selectedCoords[0];
+    const dx = coord.x - start.x;
+    const dy = coord.y - start.y;
+
+    if (dx === 0 || dy === 0 || Math.abs(dx) === Math.abs(dy)) {
+      const steps = Math.max(Math.abs(dx), Math.abs(dy));
+      this.selectedCoords = [];
+      for (let i = 0; i <= steps; i++) {
+        const stepX = steps === 0 ? 0 : dx / steps;
+        const stepY = steps === 0 ? 0 : dy / steps;
+        this.selectedCoords.push({
+          x: start.x + stepX * i,
+          y: start.y + stepY * i
+        });
+      }
+      this.drawSelection();
+    }
+  }
+
+  private submitSelection() {
+    this.isSelecting = false;
+    if (this.engine) {
+      this.engine.checkWord(this.selectedCoords);
+    }
+    this.selectedCoords = [];
+    this.selectionGraphics.clear();
+  }
+
+  private moveCursor(dx: number, dy: number) {
+    if (!this.engine) return;
+    const state = this.engine.getState();
+    const nx = Phaser.Math.Clamp(this.cursor.x + dx, 0, state.width - 1);
+    const ny = Phaser.Math.Clamp(this.cursor.y + dy, 0, state.height - 1);
+    this.cursor = { x: nx, y: ny };
+    this.drawCursor();
+    if (this.isSelecting) {
+      this.extendSelectionTo(this.cursor);
+    }
+  }
+
+  private handleKeyDown(event: KeyboardEvent) {
+    switch (event.key) {
+      case 'ArrowRight':
+        this.moveCursor(1, 0);
+        break;
+      case 'ArrowLeft':
+        this.moveCursor(-1, 0);
+        break;
+      case 'ArrowDown':
+        this.moveCursor(0, 1);
+        break;
+      case 'ArrowUp':
+        this.moveCursor(0, -1);
+        break;
+      case 'Enter':
+      case ' ':
+        event.preventDefault();
+        if (this.isSelecting) {
+          this.submitSelection();
+        } else {
+          this.isSelecting = true;
+          this.selectedCoords = [this.cursor];
+          this.drawSelection();
+        }
+        break;
+      case 'Escape':
+        if (this.isSelecting) {
+          this.isSelecting = false;
+          this.selectedCoords = [];
+          this.selectionGraphics.clear();
+        }
+        break;
+    }
+  }
+
+  // Visible focus indicator for the keyboard cursor (WCAG 2.4.11) — distinct
+  // from the (green) found-word and (translucent black) drag-selection strokes.
+  private drawCursor() {
+    if (!this.cursorGraphics) return;
+    this.cursorGraphics.clear();
+    this.cursorGraphics.lineStyle(3, 0x18529d, 1);
+    this.cursorGraphics.strokeRect(
+      this.gridOffset.x + this.cursor.x * this.cellSize + 2,
+      this.gridOffset.y + this.cursor.y * this.cellSize + 2,
+      this.cellSize - 4,
+      this.cellSize - 4
+    );
   }
 
   private drawSelection() {
@@ -219,6 +300,7 @@ export class WordSearchScene extends Phaser.Scene {
     this.input.off('pointerdown', this.handlePointerDown, this);
     this.input.off('pointermove', this.handlePointerMove, this);
     this.input.off('pointerup', this.handlePointerUp, this);
+    this.input.keyboard?.off('keydown', this.handleKeyDown, this);
     if (this.unsubscribeEngine) {
       this.unsubscribeEngine();
       this.unsubscribeEngine = undefined;

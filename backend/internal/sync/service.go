@@ -157,9 +157,11 @@ func (s *Service) ProcessSync(ctx context.Context, req domain.SyncEventRequest, 
 		}
 
 		if err := qtx.UpsertPlayerProgressForAttempt(ctx, repository.UpsertPlayerProgressForAttemptParams{
-			UserID:          req.UserID,
-			LevelID:         attempt.LevelID,
-			BestScore:       serverXP,
+			UserID:  req.UserID,
+			LevelID: attempt.LevelID,
+			// best_score is the in-game score (client-reported, validated >= 0),
+			// mirroring the online path. XP total stays server-recalculated.
+			BestScore:       attempt.Score,
 			XpTotalForLevel: serverXP,
 			Completed:       attempt.Completed,
 		}); err != nil {
@@ -225,6 +227,7 @@ type preparedAttempt struct {
 	LevelID    uuid.UUID
 	Date       time.Time
 	Difficulty int32
+	Score      int32
 	Completed  bool
 }
 
@@ -240,6 +243,9 @@ func (s *Service) validateAndPrepare(ctx context.Context, q *repository.Queries,
 		if date.After(today) {
 			return nil, nil, errors.New("future_attempt_date")
 		}
+		if attempt.Score < 0 {
+			return nil, nil, errors.New("invalid_score")
+		}
 		level, err := q.GetLevelByID(ctx, attempt.LevelID)
 		if err != nil || !level.IsPublished {
 			return nil, nil, errors.New("level_not_available")
@@ -248,6 +254,7 @@ func (s *Service) validateAndPrepare(ctx context.Context, q *repository.Queries,
 			LevelID:    attempt.LevelID,
 			Date:       date,
 			Difficulty: level.Difficulty,
+			Score:      int32(attempt.Score),
 			Completed:  attempt.Completed,
 		})
 	}
@@ -285,6 +292,7 @@ func CanonicalSigningPayload(req domain.SyncEventRequest) string {
 			attempt.AttemptDate,
 			strconv.Itoa(attempt.AttemptNumber),
 			strconv.Itoa(attempt.XPAwarded),
+			strconv.Itoa(attempt.Score),
 			strconv.FormatBool(attempt.Completed),
 		}, ","))
 	}

@@ -104,9 +104,19 @@ paths:
 
   /auth/tutor-consent:
     post:
-      summary: Registro de consentimiento de tutor para usuarios menores
+      summary: Solicitud de consentimiento de tutor (paso 1 del doble opt-in)
       operationId: submitTutorConsent
       security: []
+      description: |
+        Inicia el doble opt-in del tutor. Guarda los datos del tutor como una
+        solicitud PENDIENTE con un token de un solo uso (24h por defecto) y envía
+        un enlace de verificación al correo del tutor. La cuenta del menor NO se
+        activa aquí: la activación ocurre sólo cuando el tutor abre el enlace
+        (GET /auth/tutor-consent/verify), momento en que se registran la IP, la
+        fecha y la hora del clic como evidencia legal del consentimiento.
+
+        La respuesta es intencionalmente uniforme (202) exista o no la cuenta y
+        esté o no pendiente, para no filtrar la existencia de cuentas.
       requestBody:
         required: true
         content:
@@ -114,16 +124,86 @@ paths:
             schema:
               $ref: '#/components/schemas/TutorConsentRequestDTO'
       responses:
-        '201':
-          description: Consentimiento registrado con sello HMAC y evidencia legal.
+        '202':
+          description: |
+            Solicitud aceptada. Si la cuenta requiere consentimiento, se envió un
+            correo de verificación al tutor.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    enum: [pending_verification]
+                  message:
+                    type: string
         '400':
           $ref: '#/components/responses/BadRequest'
-        '404':
-          $ref: '#/components/responses/NotFound'
-        '409':
-          $ref: '#/components/responses/Conflict'
+        '422':
+          description: Error de validación de los datos del tutor.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '502':
+          description: No se pudo enviar el correo de verificación al tutor.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
         '500':
           $ref: '#/components/responses/InternalServerError'
+
+  /auth/tutor-consent/verify:
+    get:
+      summary: Verificación del consentimiento de tutor (paso 2 del doble opt-in)
+      operationId: verifyTutorConsent
+      security: []
+      description: |
+        Endpoint destinado al navegador del tutor (enlace del correo). Valida el
+        token, registra el clic (IP, fecha y hora) como evidencia legal, crea el
+        registro de consentimiento con sello HMAC y activa la cuenta del menor.
+        Responde con una página HTML (no JSON) porque el tutor la abre desde su
+        cliente de correo.
+      parameters:
+        - name: token
+          in: query
+          required: true
+          schema:
+            type: string
+          description: Token opaco de un solo uso entregado en el correo del tutor.
+      responses:
+        '200':
+          description: Consentimiento confirmado; cuenta activada. Página HTML.
+          content:
+            text/html:
+              schema:
+                type: string
+        '400':
+          description: Token ausente o inválido. Página HTML.
+          content:
+            text/html:
+              schema:
+                type: string
+        '409':
+          description: El token ya había sido utilizado. Página HTML.
+          content:
+            text/html:
+              schema:
+                type: string
+        '410':
+          description: El token caducó. Página HTML.
+          content:
+            text/html:
+              schema:
+                type: string
+        '500':
+          description: Error interno al procesar la verificación. Página HTML.
+          content:
+            text/html:
+              schema:
+                type: string
 
   /auth/age-up:
     post:
@@ -277,6 +357,45 @@ paths:
           description: Solicitud resuelta.
         '403':
           $ref: '#/components/responses/Forbidden'
+
+  /admin/security-incidents:
+    post:
+      summary: Registrar un incidente de seguridad (bitácora del Documento de Seguridad)
+      operationId: createSecurityIncident
+      description: |
+        Sólo admin/director. Registra un incidente en la bitácora de retención de
+        5 años, sellado con un hash HMAC de evidencia (No-Repudio) y con entrada en
+        admin_audit_log. Los campos de seguimiento (reported_at, resolved_at,
+        notified_*) se completan posteriormente.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SecurityIncidentRequestDTO'
+      responses:
+        '201':
+          description: Incidente registrado.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id:
+                    type: string
+                    format: uuid
+                  severity:
+                    type: string
+                  message:
+                    type: string
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '422':
+          description: Error de validación del incidente.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
 
   /devices:
     get:
@@ -746,7 +865,7 @@ components:
 
     LevelAttemptPayloadItem:
       type: object
-      required: [level_id, attempt_date, attempt_number, xp_awarded, completed]
+      required: [level_id, attempt_date, attempt_number, xp_awarded, score, completed]
       additionalProperties: false
       properties:
         level_id:
@@ -762,6 +881,10 @@ components:
           type: integer
           minimum: 0
           description: XP calculada localmente. El backend recalcula este valor con dificultad oficial, número de intento y lock transaccional. No se confía en este campo.
+        score:
+          type: integer
+          minimum: 0
+          description: Puntaje del juego para este intento (NO es XP). Alimenta player_progress.best_score igual que el flujo online; la XP siempre se recalcula en el servidor y nunca se deriva de este valor.
         completed:
           type: boolean
 
@@ -915,6 +1038,30 @@ components:
         response_summary:
           type: string
           maxLength: 1000
+
+    SecurityIncidentRequestDTO:
+      type: object
+      required: [severity, affected_scope, description, containment_actions]
+      additionalProperties: false
+      properties:
+        severity:
+          type: string
+          enum: [low, medium, high, critical]
+        affected_scope:
+          type: string
+          maxLength: 2000
+        description:
+          type: string
+          maxLength: 10000
+        containment_actions:
+          type: string
+          maxLength: 10000
+        detected_at:
+          type: string
+          format: date-time
+          description: RFC3339; por defecto la hora del servidor. No puede ser futuro.
+        reported_to_cutai:
+          type: boolean
 
     # ── Levels ────────────────────────────────────────────────────────────────
     SectionDTO:

@@ -4,9 +4,21 @@
    SISTEMA DE DISEÑO INSTITUCIONAL – USBI / Universidad Veracruzana
    Fuente de verdad: plan/Convenciones_de_color_UV.md
    Contraste verificado WCAG 2.2:
-     - primary (azul UV #18529D) sobre blanco → 7.69:1 ✓
+     - primary (azul UV #18529D) sobre blanco → 7.69:1 ✓  (modo claro)
+     - primary (azul claro #6f9fe0) sobre tarjeta oscura #1e293b → 5.37:1 ✓ (modo oscuro)
      - secondary (verde UV #28AD56) sobre negro → 7.20:1 ✓
      - secondary sobre blanco → 2.92:1 ✗ → usar solo como acento
+   NOTA (C3): --color-primary es TEMÁTICO. En modo oscuro el azul institucional
+   estático (#18529D) sólo alcanza 1.9–2.6:1 sobre los fondos oscuros, así que se
+   sustituye por un azul más claro y el foreground de los botones se invierte a
+   oscuro para seguir siendo legible sobre ese azul claro.
+
+   NOTA (C9, decisión confirmada 2026-08-02): esta paleta institucional gobierna
+   login/dashboard/perfil/admin. Los minijuegos (Puzzle, banners de "¡Completado!",
+   etc.) usan deliberadamente una paleta arcoíris/lúdica separada — es una
+   separación intencional "zona institucional" vs "zona de juego" para un público
+   que va de niños a adultos mayores, no un descuido a unificar. No recolorear los
+   minijuegos para que coincidan con esta paleta sin discutirlo antes.
    ============================================================ */
 
 :root {
@@ -17,6 +29,9 @@
   --theme-border: #D1D5DB;
   --theme-card: #FFFFFF;
   --theme-text-card: #0f172a;
+  --theme-primary: #18529D;
+  --theme-primary-hover: #0f3d76;
+  --theme-primary-foreground: #FFFFFF;
 }
 
 html.dark {
@@ -27,13 +42,20 @@ html.dark {
   --theme-border: #475569;
   --theme-card: #1e293b;
   --theme-text-card: #f8fafc;
+  /* Lighter blue keeps headings/links/CardTitle >=4.5:1 on every dark surface
+     (verified: 7.41:1 on #020617, 6.56:1 on #0f172a, 5.37:1 on #1e293b). Button
+     foreground flips to dark so text stays legible on the lighter blue fill
+     (6.56:1). See audit finding C3. */
+  --theme-primary: #6f9fe0;
+  --theme-primary-hover: #7fb0e8;
+  --theme-primary-foreground: #0f172a;
 }
 
 @theme {
   /* ── Paleta institucional UV ─────────────────────────────── */
-  --color-primary:            #18529D; /* Azul UV – botones, encabezados, links */
-  --color-primary-hover:      #0f3d76; /* Azul oscuro para hover */
-  --color-primary-foreground: #FFFFFF;
+  --color-primary:            var(--theme-primary);            /* Azul UV; más claro en modo oscuro (C3) */
+  --color-primary-hover:      var(--theme-primary-hover);      /* Hover; más claro en modo oscuro */
+  --color-primary-foreground: var(--theme-primary-foreground); /* Texto sobre primary; oscuro en modo oscuro */
 
   --color-secondary:          #28AD56; /* Verde UV – acentos, iconos, badges */
   --color-secondary-dark:     #006633; /* Verde oscuro – texto sobre blanco (WCAG ✓) */
@@ -100,9 +122,17 @@ html.dark {
     outline-offset: 2px;
   }
 
-  /* Área de clic mínima 44×44px (WCAG 2.5.5) */
+  /* Área de clic mínima 44×44px (WCAG 2.5.5).
+     min-width sólo en button/[role=button] (C6): forzarlo también en <a>,
+     <input>, <select>, <textarea> rompería layouts válidos — links de texto en
+     línea, campos numéricos angostos, etc. Los botones icon-only sin texto
+     (como el "X" de eliminar) son exactamente el caso que un min-width angosto
+     hace fallar. */
   button, [role="button"], a, input, select, textarea {
     min-height: var(--spacing-touch);
+  }
+  button, [role="button"] {
+    min-width: var(--spacing-touch);
   }
 
   h1, h2, h3, h4, h5, h6 {
@@ -153,4 +183,36 @@ html.tritanopia #root {
   html.tritanopia #root {
     filter: url("#tritanopia-filter") contrast(1.03);
   }
+}
+
+/* ── Reducir movimiento (RNF16 / audit C7) ───────────────────────────────────
+   Antes: cero uso de prefers-reduced-motion en todo el frontend — animate-pulse,
+   animate-bounce, hover:scale-105 y los tweens CSS corrían siempre. Este bloque
+   neutraliza animaciones/transiciones CSS globalmente, tanto por la preferencia
+   del sistema operativo como por el toggle manual en /settings (html.reduce-motion,
+   para quien no puede exponer la preferencia del SO o prefiere anularla).
+   NOTA: esto cubre CSS; los tweens internos de Phaser (crucigrama, sopa de letras,
+   serpientes y escaleras) NO están cubiertos por este mecanismo — ver seguimiento
+   en AUDITORIA_PREPARACION_PRODUCCION.md. */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+html.reduce-motion *, html.reduce-motion *::before, html.reduce-motion *::after {
+  animation-duration: 0.01ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.01ms !important;
+  scroll-behavior: auto !important;
+}
+
+/* ── Tamaño de texto ajustable (audit C7) ────────────────────────────────── */
+html.text-scale-large {
+  font-size: 18px;
+}
+html.text-scale-larger {
+  font-size: 20px;
 }

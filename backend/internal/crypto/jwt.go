@@ -14,8 +14,8 @@ var (
 )
 
 type TokenConfig struct {
-	Secret        []byte
-	AccessExpiry  time.Duration
+	Secret       []byte
+	AccessExpiry time.Duration
 }
 
 type usbiClaims struct {
@@ -28,7 +28,7 @@ type usbiClaims struct {
 // GenerateToken creates a signed JWT for a user.
 func GenerateToken(claims domain.JWTClaims, cfg TokenConfig) (string, error) {
 	now := time.Now()
-	
+
 	c := usbiClaims{
 		UserID:       claims.UserID,
 		Role:         string(claims.Role),

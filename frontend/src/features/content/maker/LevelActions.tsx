@@ -11,11 +11,10 @@ export function LevelActions({
 }) {
   return (
     <div className="flex gap-2 mt-6">
-      <Button 
+      <Button
         variant="primary"
-        onClick={onSave} 
+        onClick={onSave}
         disabled={loading || !isValid}
-        style={{ backgroundColor: '#22c55e', color: 'white', borderColor: '#22c55e' }}
       >
         {isEditing ? 'Guardar Cambios' : 'Crear Nivel'}
       </Button>

@@ -6,33 +6,46 @@
     <title>USBI Universidad Veracruzana</title>
   </head>
   <body>
+    <!--
+      Color-vision assistive filters (audit finding C1).
+
+      These are DALTONIZATION (correction) matrices, NOT simulation matrices.
+      A simulation matrix shows a non-colorblind person how a colorblind person
+      sees; applying one to a user who IS colorblind only removes more colour
+      information. Each matrix below is instead M = I + C·(I − S), where S is the
+      Brettel/Viénot dichromacy simulation for the condition and C is the
+      error-redistribution matrix from the Fidaner/“Daltonize” algorithm: it
+      computes the colour information lost to that condition and pushes it into
+      channels the user can still distinguish. Grays map to themselves (each row
+      sums to 1); out-of-gamut results are clamped by feColorMatrix as intended.
+    -->
     <svg class="color-filter-defs" aria-hidden="true" focusable="false" style="position:absolute;width:0;height:0;overflow:hidden">
       <defs>
-        <filter id="deuteranopia-filter">
+        <filter id="deuteranopia-filter" color-interpolation-filters="linearRGB">
           <feColorMatrix
             type="matrix"
-            values="0.625 0.375 0   0 0
-                    0.7   0.3   0   0 0
-                    0     0.3   0.7 0 0
-                    0     0     0   1 0"
+            values="1       0       0    0 0
+                    -0.4375 1.4375  0    0 0
+                    0.2625  -0.5625 1.3  0 0
+                    0       0       0    1 0"
           />
         </filter>
-        <filter id="protanopia-filter">
+        <filter id="protanopia-filter" color-interpolation-filters="linearRGB">
           <feColorMatrix
             type="matrix"
-            values="0.567 0.433 0     0 0
-                    0.558 0.442 0     0 0
-                    0     0.242 0.758 0 0
-                    0     0     0     1 0"
+            values="1       0       0      0 0
+                    -0.2549 1.2549  0      0 0
+                    0.3031  -0.5451 1.242  0 0
+                    0       0       0      1 0"
           />
         </filter>
-        <filter id="tritanopia-filter">
+        <filter id="tritanopia-filter" color-interpolation-filters="linearRGB">
           <feColorMatrix
             type="matrix"
-            values="0.95 0.05  0    0 0
-                    0    0.433 0.567 0 0
-                    0    0.475 0.525 0 0
-                    0    0     0     1 0"
+            values="1.05 -0.3825 0.3325  0 0
+                    0    1.2345  -0.2345 0 0
+                    0    0       1       0 0
+                    0    0       0       1 0"
           />
         </filter>
       </defs>

@@ -96,7 +96,7 @@ export function MemoryForm({ value, onChange }: { value: MemoryFormValue; onChan
       <Button type="button" variant="outline" onClick={addPair}>
         + Agregar Par
       </Button>
-      <p className="text-xs text-gray-500">Mínimo 4 pares requeridos.</p>
+      <p className="text-xs text-[--color-muted]">Mínimo 4 pares requeridos.</p>
     </div>
   );
 }

@@ -178,8 +178,7 @@ export default function LoginPage() {
           <Button
             type="submit"
             size="lg"
-            className="w-full bg-green-500 hover:bg-green-600 text-white font-bold"
-            style={{ backgroundColor: '#22c55e', color: 'white' }}
+            className="w-full font-bold"
             disabled={loading}
             aria-busy={loading}
           >
@@ -188,7 +187,13 @@ export default function LoginPage() {
         </form>
 
         <div className="text-center text-sm">
-          <Link to="/register" style={{ color: 'var(--color-primary)' }} className="hover:underline">
+          {/* inline-flex + padding lets min-height (WCAG 2.5.5, C6) apply — a
+              plain inline <a> ignores min-height entirely. */}
+          <Link
+            to="/register"
+            style={{ color: 'var(--color-primary)' }}
+            className="inline-flex items-center justify-center py-2 hover:underline"
+          >
             ¿No tienes cuenta? Regístrate
           </Link>
         </div>

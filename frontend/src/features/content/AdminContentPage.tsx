@@ -218,18 +218,18 @@ export function AdminContentPage() {
                 <Input label="Título de sección" value={sectionTitle} onChange={(e) => setSectionTitle(e.currentTarget.value)} required />
                 <Input label="Descripción (opcional)" value={sectionDescription} onChange={(e) => setSectionDescription(e.currentTarget.value)} />
                 <Input label="Color" type="color" value={sectionColor} onChange={(e) => setSectionColor(e.currentTarget.value)} required />
-                <Button type="submit" disabled={loading} className="bg-[#22c55e] hover:bg-[#16a34a] text-white w-full">Crear sección</Button>
+                <Button type="submit" disabled={loading} className="w-full">Crear sección</Button>
               </form>
             </section>
 
             <section className="rounded-lg bg-[--color-card] p-5 shadow-sm flex flex-col justify-center items-center">
               <h2 className="mb-4 text-xl font-semibold">Nuevo Nivel Oficial</h2>
-              <p className="text-sm text-gray-500 mb-4 text-center">Usa el editor visual para configurar niveles con validación completa.</p>
+              <p className="text-sm text-[--color-muted] mb-4 text-center">Usa el editor visual para configurar niveles con validación completa.</p>
               <div className="flex gap-4 mb-6">
                 <Button onClick={() => setShowMaker(true)} className="bg-[#18529D] text-white">Abrir Creador de Niveles</Button>
                 <Button variant="outline" onClick={handleImportCommunityLevel}>Importar Nivel</Button>
               </div>
-              <div className="text-xs text-gray-500 text-center max-w-sm">
+              <div className="text-xs text-[--color-muted] text-center max-w-sm">
                 <p className="mb-1"><strong>Aviso:</strong> Los niveles que sean expuestos al público son responsabilidad de la institución.</p>
                 <p>Se copiarán los datos válidos y se te pedirá añadir la sección a la que corresponde.</p>
               </div>
@@ -331,7 +331,7 @@ export function AdminContentPage() {
                                 >
                                   {loadingLevelID === level.id ? 'Cargando' : 'Editar'}
                                 </Button>
-                                {!level.is_published && <Button size="sm" className="h-8 px-2 text-xs bg-[#22c55e] hover:bg-[#16a34a] text-white" onClick={() => void publishLevel(level.id)}>Publicar</Button>}
+                                {!level.is_published && <Button size="sm" className="h-8 px-2 text-xs" onClick={() => void publishLevel(level.id)}>Publicar</Button>}
                                 {level.is_published && <Button size="sm" variant="outline" className="h-8 px-2 text-xs" onClick={() => void unpublishLevel(level.id)}>Ocultar</Button>}
                                 <Button size="sm" variant="outline" className="h-8 px-2 text-xs border-[--color-error] text-[--color-error] hover:bg-[--color-error] hover:text-white" onClick={() => void archiveLevel(level.id)}>Archivar</Button>
                               </div>

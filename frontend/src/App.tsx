@@ -1,7 +1,7 @@
 import { lazy, Suspense, useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Navigate, useNavigate } from 'react-router-dom';
 import { ProtectedRoute } from './features/auth/ProtectedRoute';
-import { useSettingsStore } from './stores/useSettingsStore';
+import { applyDocumentClasses, useSettingsStore } from './stores/useSettingsStore';
 
 const LoginPage = lazy(() => import('./features/auth/LoginPage'));
 const RegisterPage = lazy(() => import('./features/auth/RegisterPage'));
@@ -15,23 +15,14 @@ const ProfilePage = lazy(() => import('./features/profile/ProfilePage').then((mo
 const ArcoRequestPage = lazy(() => import('./features/arco/ArcoPage').then((mod) => ({ default: mod.ArcoRequestPage })));
 const ArcoAdminPage = lazy(() => import('./features/arco/ArcoPage').then((mod) => ({ default: mod.ArcoAdminPage })));
 const LocalLevelPage = lazy(() => import('./features/content/LocalLevelPage').then((mod) => ({ default: mod.LocalLevelPage })));
+const SettingsPage = lazy(() => import('./features/settings/SettingsPage').then((mod) => ({ default: mod.SettingsPage })));
 
 export default function App() {
-  const { theme, colorBlindFilter } = useSettingsStore();
+  const { theme, colorBlindFilter, reduceMotion, textScale } = useSettingsStore();
 
   useEffect(() => {
-    const html = document.documentElement;
-    if (theme === 'dark') {
-      html.classList.add('dark');
-    } else {
-      html.classList.remove('dark');
-    }
-    
-    html.classList.remove('deuteranopia', 'protanopia', 'tritanopia');
-    if (colorBlindFilter !== 'none') {
-      html.classList.add(colorBlindFilter);
-    }
-  }, [theme, colorBlindFilter]);
+    applyDocumentClasses({ theme, colorBlindFilter, reduceMotion, textScale });
+  }, [theme, colorBlindFilter, reduceMotion, textScale]);
 
   return (
     <BrowserRouter>
@@ -85,6 +76,14 @@ export default function App() {
             element={
               <ProtectedRoute>
                 <ProfilePage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/settings"
+            element={
+              <ProtectedRoute>
+                <SettingsPage />
               </ProtectedRoute>
             }
           />

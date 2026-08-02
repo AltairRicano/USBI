@@ -31,6 +31,7 @@ export const LevelAttemptItemSchema = z.object({
   attempt_date: z.string(), // YYYY-MM-DD
   attempt_number: z.number().int().min(1),
   xp_awarded: z.number().int().min(0),
+  score: z.number().int().min(0),
   completed: z.boolean(),
 });
 

@@ -9,9 +9,11 @@ export interface IRefPhaserGame {
 export interface PhaserGameProps {
     config: Phaser.Types.Core.GameConfig;
     onGameReady?: (game: Phaser.Game) => void;
+    /** Accessible name for the game canvas region (audit finding C5). */
+    ariaLabel?: string;
 }
 
-export const PhaserGame = forwardRef<IRefPhaserGame, PhaserGameProps>(({ config, onGameReady }, ref) => {
+export const PhaserGame = forwardRef<IRefPhaserGame, PhaserGameProps>(({ config, onGameReady, ariaLabel }, ref) => {
     const gameContainer = useRef<HTMLDivElement>(null);
     // Tracks the live Phaser.Game instance itself (not DOM state) so React 18
     // StrictMode's synchronous mount->cleanup->mount in dev never races against
@@ -66,5 +68,13 @@ export const PhaserGame = forwardRef<IRefPhaserGame, PhaserGameProps>(({ config,
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
-    return <div ref={gameContainer} className="phaser-game-container" style={{ width: '100%', height: '100%' }} />;
+    return (
+        <div
+            ref={gameContainer}
+            className="phaser-game-container"
+            style={{ width: '100%', height: '100%' }}
+            role="group"
+            aria-label={ariaLabel ?? 'Área de juego interactivo'}
+        />
+    );
 });

@@ -2,7 +2,7 @@ package transport
 
 import (
 	"context"
-	"encoding/json"
+	"log/slog"
 	"net/http"
 	"strings"
 	"sync"
@@ -14,7 +14,9 @@ import (
 	"github.com/altair/usbi-backend/internal/crypto"
 	"github.com/altair/usbi-backend/internal/devices"
 	"github.com/altair/usbi-backend/internal/domain"
+	"github.com/altair/usbi-backend/internal/httpproblem"
 	"github.com/altair/usbi-backend/internal/httputil"
+	"github.com/altair/usbi-backend/internal/incidents"
 	"github.com/altair/usbi-backend/internal/levels"
 	"github.com/altair/usbi-backend/internal/repository"
 	syncHandler "github.com/altair/usbi-backend/internal/sync"
@@ -22,16 +24,18 @@ import (
 	"github.com/go-chi/chi/v5/middleware"
 )
 
-// RouterDependencies holds all handler and config dependencies.
-// All fields are required for full Phase 2 functionality.
+// RouterDependencies holds all handler and config dependencies. A nil handler
+// registers a 501 "not implemented" stub for its routes instead of panicking,
+// so partial wiring (e.g. in tests) is safe.
 type RouterDependencies struct {
-	AuthHandler    *auth.Handler
-	SyncHandler    *syncHandler.Handler
-	LevelsHandler  *levels.Handler
-	DevicesHandler *devices.Handler
-	ReadyCheck     func(context.Context) error
-	TokenCfg       crypto.TokenConfig
-	Queries        *repository.Queries
+	AuthHandler      *auth.Handler
+	SyncHandler      *syncHandler.Handler
+	LevelsHandler    *levels.Handler
+	DevicesHandler   *devices.Handler
+	IncidentsHandler *incidents.Handler
+	ReadyCheck       func(context.Context) error
+	TokenCfg         crypto.TokenConfig
+	Queries          *repository.Queries
 	// MaxBodyBytes caps incoming API request bodies. Defaults to 6 MiB.
 	MaxBodyBytes int64
 	// AllowedOrigin is a comma-separated CORS allowlist (or "*" to opt into
@@ -43,6 +47,8 @@ type RouterDependencies struct {
 	// confirmed to strip/set those headers itself — otherwise any direct
 	// client can spoof its own IP for rate limiting and audit logging.
 	TrustProxyHeaders bool
+	// RequestTimeout bounds every request via middleware.Timeout. Defaults to 20s.
+	RequestTimeout time.Duration
 }
 
 const defaultMaxBodyBytes int64 = 6 * 1024 * 1024
@@ -65,13 +71,21 @@ func SetupRoutes(r chi.Router, deps RouterDependencies) {
 		origin = "https://usbi.edu.mx"
 	}
 
+	requestTimeout := deps.RequestTimeout
+	if requestTimeout <= 0 {
+		requestTimeout = 20 * time.Second
+	}
+
 	// Global middleware stack
 	r.Use(middleware.RequestID)
 	if deps.TrustProxyHeaders {
 		r.Use(middleware.RealIP)
 	}
-	r.Use(middleware.Logger)
+	r.Use(requestLogger)
 	r.Use(middleware.Recoverer)
+	// Per-request deadline (B5): cancels the request context so slow queries /
+	// blocked advisory locks release their goroutine and pool connection.
+	r.Use(middleware.Timeout(requestTimeout))
 	r.Use(corsMiddleware(origin))
 	r.Use(maxBodyBytesMiddleware(deps.MaxBodyBytes))
 
@@ -84,11 +98,13 @@ func SetupRoutes(r chi.Router, deps RouterDependencies) {
 				r.Post("/auth/login", deps.AuthHandler.Login)
 				r.Post("/auth/refresh", deps.AuthHandler.Refresh)
 				r.Post("/auth/tutor-consent", deps.AuthHandler.TutorConsent)
+				r.Get("/auth/tutor-consent/verify", deps.AuthHandler.VerifyTutorConsent)
 			} else {
 				r.Post("/auth/register", notImplementedHandler("auth.register"))
 				r.Post("/auth/login", notImplementedHandler("auth.login"))
 				r.Post("/auth/refresh", notImplementedHandler("auth.refresh"))
 				r.Post("/auth/tutor-consent", notImplementedHandler("auth.tutorConsent"))
+				r.Get("/auth/tutor-consent/verify", notImplementedHandler("auth.verifyTutorConsent"))
 			}
 		})
 
@@ -115,6 +131,12 @@ func SetupRoutes(r chi.Router, deps RouterDependencies) {
 				r.Post("/sync", deps.SyncHandler.SyncData)
 			} else {
 				r.Post("/sync", notImplementedHandler("sync.offlineProgress"))
+			}
+
+			if deps.IncidentsHandler != nil {
+				r.Post("/admin/security-incidents", deps.IncidentsHandler.CreateIncident)
+			} else {
+				r.Post("/admin/security-incidents", notImplementedHandler("admin.createSecurityIncident"))
 			}
 
 			if deps.DevicesHandler != nil {
@@ -174,6 +196,28 @@ func maxBodyBytesMiddleware(maxBytes int64) func(http.Handler) http.Handler {
 	}
 }
 
+// requestLogger emits one structured slog record per request — method, path,
+// status, bytes, latency, request id and client IP (B4). It replaces chi's
+// text-only middleware.Logger so logs are machine-readable, and its status +
+// duration fields double as the minimal request metrics (rate-limit rejections
+// show up as status=429, HMAC failures as the /sync error status, etc.).
+func requestLogger(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		start := time.Now()
+		ww := middleware.NewWrapResponseWriter(w, r.ProtoMajor)
+		next.ServeHTTP(ww, r)
+		slog.Info("http_request",
+			"method", r.Method,
+			"path", r.URL.Path,
+			"status", ww.Status(),
+			"bytes", ww.BytesWritten(),
+			"duration_ms", time.Since(start).Milliseconds(),
+			"request_id", middleware.GetReqID(r.Context()),
+			"remote_ip", httputil.ClientIP(r),
+		)
+	})
+}
+
 // healthHandler returns a simple liveness probe response.
 func healthHandler(w http.ResponseWriter, _ *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
@@ -204,7 +248,7 @@ func readyHandler(check func(context.Context) error) http.HandlerFunc {
 // notImplementedHandler returns a 501 stub for routes pending implementation.
 func notImplementedHandler(operation string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		writeProblem(w, r, http.StatusNotImplemented, "not-implemented",
+		httpproblem.WriteProblem(w, r, http.StatusNotImplemented, "not-implemented",
 			"Not Implemented",
 			"Operation '"+operation+"' is pending implementation.")
 	}
@@ -265,7 +309,7 @@ func jwtAuthMiddleware(cfg crypto.TokenConfig, queries *repository.Queries) func
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			authHeader := r.Header.Get("Authorization")
 			if len(authHeader) < 8 || authHeader[:7] != "Bearer " {
-				writeProblem(w, r, http.StatusUnauthorized, "unauthorized",
+				httpproblem.WriteProblem(w, r, http.StatusUnauthorized, "unauthorized",
 					"Unauthorized", "Missing or malformed Authorization header")
 				return
 			}
@@ -274,14 +318,14 @@ func jwtAuthMiddleware(cfg crypto.TokenConfig, queries *repository.Queries) func
 
 			// Reject if JWT secret is not configured (zero-value cfg).
 			if len(cfg.Secret) == 0 {
-				writeProblem(w, r, http.StatusServiceUnavailable, "misconfigured",
+				httpproblem.WriteProblem(w, r, http.StatusServiceUnavailable, "misconfigured",
 					"Service Unavailable", "Authentication service is not configured")
 				return
 			}
 
 			claims, err := crypto.ValidateToken(tokenStr, cfg)
 			if err != nil {
-				writeProblem(w, r, http.StatusUnauthorized, "unauthorized",
+				httpproblem.WriteProblem(w, r, http.StatusUnauthorized, "unauthorized",
 					"Unauthorized", "Invalid or expired token")
 				return
 			}
@@ -291,7 +335,7 @@ func jwtAuthMiddleware(cfg crypto.TokenConfig, queries *repository.Queries) func
 			if queries != nil {
 				dbVersion, err := queries.GetUserTokenVersion(r.Context(), claims.UserID)
 				if err != nil || int(dbVersion) != claims.TokenVersion {
-					writeProblem(w, r, http.StatusUnauthorized, "unauthorized",
+					httpproblem.WriteProblem(w, r, http.StatusUnauthorized, "unauthorized",
 						"Unauthorized", "Token has been revoked or is invalid")
 					return
 				}
@@ -302,19 +346,6 @@ func jwtAuthMiddleware(cfg crypto.TokenConfig, queries *repository.Queries) func
 			next.ServeHTTP(w, r.WithContext(ctx))
 		})
 	}
-}
-
-// writeProblem emits an RFC 7807 application/problem+json response.
-func writeProblem(w http.ResponseWriter, r *http.Request, status int, slug, title, detail string) {
-	w.Header().Set("Content-Type", "application/problem+json")
-	w.WriteHeader(status)
-	_ = json.NewEncoder(w).Encode(domain.ProblemDetails{
-		Type:     "https://api.usbi.edu.mx/errors/" + slug,
-		Title:    title,
-		Status:   status,
-		Detail:   detail,
-		Instance: r.URL.Path,
-	})
 }
 
 type visitor struct {
@@ -366,32 +397,79 @@ func init() {
 	}()
 }
 
+// proxyMisconfigWarnThreshold is how many requests must be observed before the
+// single-IP-diversity check below fires (avoids a false positive from the first
+// few requests at cold start).
+const proxyMisconfigWarnThreshold = 50
+
+var (
+	visitorRequestCount     int
+	authVisitorRequestCount int
+	proxyMisconfigWarnOnce  sync.Once
+)
+
+// warnIfLikelyProxyMisconfigured logs once if every request so far has come
+// from the same IP after a meaningful sample size — the signature of
+// TRUST_PROXY_HEADERS=false behind a reverse proxy that strips/rewrites the
+// client's real IP, collapsing rate limiting and tutor-consent audit IPs onto
+// the proxy's loopback address (audit finding B3).
+func warnIfLikelyProxyMisconfigured() {
+	mu.Lock()
+	distinctGeneral := len(visitors)
+	generalCount := visitorRequestCount
+	mu.Unlock()
+
+	authMu.Lock()
+	distinctAuth := len(authVisitors)
+	authCount := authVisitorRequestCount
+	authMu.Unlock()
+
+	total := generalCount + authCount
+	if total < proxyMisconfigWarnThreshold {
+		return
+	}
+	if distinctGeneral > 1 || distinctAuth > 1 {
+		return
+	}
+	proxyMisconfigWarnOnce.Do(func() {
+		slog.Warn("rate limiter has seen only one distinct client IP after many requests; "+
+			"if this server sits behind a reverse proxy, TRUST_PROXY_HEADERS is probably "+
+			"false when it should be true (see DEPLOYMENT.md)",
+			"requests_observed", total)
+	})
+}
+
 func getVisitor(ip string) *rate.Limiter {
 	mu.Lock()
-	defer mu.Unlock()
-
 	v, exists := visitors[ip]
 	if !exists {
-		// allow 10 requests per second with burst of 20
 		limiter := rate.NewLimiter(10, 20)
 		visitors[ip] = &visitor{limiter, time.Now()}
-		return limiter
+		v = visitors[ip]
+	} else {
+		v.lastSeen = time.Now()
 	}
-	v.lastSeen = time.Now()
+	visitorRequestCount++
+	mu.Unlock()
+
+	warnIfLikelyProxyMisconfigured()
 	return v.limiter
 }
 
 func getAuthVisitor(ip string) *rate.Limiter {
 	authMu.Lock()
-	defer authMu.Unlock()
-
 	v, exists := authVisitors[ip]
 	if !exists {
 		limiter := rate.NewLimiter(authRateRPS, authRateBurst)
 		authVisitors[ip] = &visitor{limiter, time.Now()}
-		return limiter
+		v = authVisitors[ip]
+	} else {
+		v.lastSeen = time.Now()
 	}
-	v.lastSeen = time.Now()
+	authVisitorRequestCount++
+	authMu.Unlock()
+
+	warnIfLikelyProxyMisconfigured()
 	return v.limiter
 }
 

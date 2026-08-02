@@ -8,11 +8,15 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"strconv"
 	"strings"
 	"time"
 
+	"github.com/altair/usbi-backend/internal/audit"
 	"github.com/altair/usbi-backend/internal/crypto"
 	"github.com/altair/usbi-backend/internal/domain"
+	"github.com/altair/usbi-backend/internal/mailer"
+	"github.com/altair/usbi-backend/internal/privacy"
 	"github.com/altair/usbi-backend/internal/repository"
 	"github.com/google/uuid"
 )
@@ -28,6 +32,11 @@ var (
 	ErrInvalidRefresh   = errors.New("invalid refresh token")
 	ErrForbidden        = errors.New("forbidden")
 	ErrAuthBusy         = errors.New("authentication service is busy")
+	// Tutor double opt-in (A1).
+	ErrTutorTokenInvalid = errors.New("tutor consent token invalid")
+	ErrTutorTokenExpired = errors.New("tutor consent token expired")
+	ErrTutorTokenUsed    = errors.New("tutor consent token already used")
+	ErrMailSend          = errors.New("failed to send verification email")
 )
 
 const defaultMaxConcurrentPasswordHashes = 2
@@ -62,13 +71,26 @@ type Config struct {
 	TokenConfig crypto.TokenConfig
 	// MaxConcurrentPasswordHashes caps concurrent Argon2 work. Defaults to 2.
 	MaxConcurrentPasswordHashes int
+	// Mailer delivers the tutor verification email. Defaults to a dev LogMailer
+	// (which only logs the link) when nil — acceptable for local dev, never prod.
+	Mailer mailer.Mailer
+	// TutorConsentVerifyURL is the absolute URL of the GET verification endpoint;
+	// the raw token is appended as "?token=". e.g.
+	// https://usbi.edu.mx/api/v1/auth/tutor-consent/verify
+	TutorConsentVerifyURL string
+	// TutorConsentTokenTTL is how long a verification token stays valid.
+	// Defaults to 24h.
+	TutorConsentTokenTTL time.Duration
 }
 
 // Service implements the authentication business logic.
 type Service struct {
-	queries           *repository.Queries
-	cfg               Config
-	passwordHashSlots chan struct{}
+	queries               *repository.Queries
+	cfg                   Config
+	passwordHashSlots     chan struct{}
+	mailer                mailer.Mailer
+	tutorConsentVerifyURL string
+	tutorConsentTokenTTL  time.Duration
 }
 
 // NewService creates an auth.Service. It panics if cfg contains zero values
@@ -90,10 +112,25 @@ func NewService(q *repository.Queries, cfg Config) *Service {
 	if maxHashes <= 0 {
 		maxHashes = defaultMaxConcurrentPasswordHashes
 	}
+	m := cfg.Mailer
+	if m == nil {
+		m = mailer.NewLogMailer(nil)
+	}
+	ttl := cfg.TutorConsentTokenTTL
+	if ttl <= 0 {
+		ttl = 24 * time.Hour
+	}
+	verifyURL := cfg.TutorConsentVerifyURL
+	if verifyURL == "" {
+		verifyURL = "https://usbi.edu.mx/api/v1/auth/tutor-consent/verify"
+	}
 	return &Service{
-		queries:           q,
-		cfg:               cfg,
-		passwordHashSlots: make(chan struct{}, maxHashes),
+		queries:               q,
+		cfg:                   cfg,
+		passwordHashSlots:     make(chan struct{}, maxHashes),
+		mailer:                m,
+		tutorConsentVerifyURL: verifyURL,
+		tutorConsentTokenTTL:  ttl,
 	}
 }
 
@@ -321,7 +358,8 @@ func (s *Service) Logout(ctx context.Context, userID uuid.UUID) error {
 }
 
 // AgeUp attempts to transition a user from pending_tutor_consent to active.
-func (s *Service) AgeUp(ctx context.Context, userID uuid.UUID) error {
+// ip/userAgent identify the requester for the audit ledger (A3).
+func (s *Service) AgeUp(ctx context.Context, userID uuid.UUID, ip, userAgent string) error {
 	if userID == uuid.Nil {
 		return ErrValidation
 	}
@@ -351,20 +389,57 @@ func (s *Service) AgeUp(ctx context.Context, userID uuid.UUID) error {
 	}); err != nil {
 		return fmt.Errorf("pseudonymizing tutor consents after age-up: %w", err)
 	}
+	if err := audit.Log(ctx, qtx, audit.Entry{
+		ActorID:    userID,
+		Action:     "user.age_up",
+		EntityType: "user",
+		EntityID:   userID,
+		After:      map[string]any{"is_adult": true, "age_up_attempts": attempts},
+		IP:         ip,
+		UserAgent:  userAgent,
+	}); err != nil {
+		return fmt.Errorf("logging age-up: %w", err)
+	}
 
 	return tx.Commit()
 }
 
-func (s *Service) SubmitTutorConsent(ctx context.Context, req TutorConsentRequest, acceptanceIP net.IP, userAgent string) error {
+// SubmitTutorConsent starts the tutor double opt-in. It stores the tutor's data
+// as a PENDING request with a single-use token (24h by default) and emails a
+// verification link to the tutor. The minor's account is NOT activated here —
+// activation happens only when the tutor clicks the link (VerifyTutorConsent),
+// at which point the click's IP/user-agent become the legal consent evidence.
+//
+// requestedIP/userAgent describe whoever submitted the form; they are recorded
+// for audit only, not as consent evidence. To avoid account enumeration and
+// email-bombing, a token is issued (and an email sent) only when the referenced
+// account exists and is actually pending tutor consent; callers always receive
+// the same outcome regardless of whether that was the case.
+func (s *Service) SubmitTutorConsent(ctx context.Context, req TutorConsentRequest, requestedIP net.IP, userAgent string) error {
 	if err := validateTutorConsent(req); err != nil {
 		return fmt.Errorf("%w: %s", ErrValidation, err.Error())
 	}
-	if acceptanceIP == nil {
-		acceptanceIP = net.ParseIP("0.0.0.0")
+	if requestedIP == nil {
+		requestedIP = net.ParseIP("0.0.0.0")
 	}
 
-	signaturePayload := []byte(req.UserID.String() + "|" + strings.ToLower(strings.TrimSpace(req.TutorEmail)) + "|" + req.PrivacyNoticeVersion)
-	signature := crypto.GenerateHMAC(signaturePayload, s.cfg.HMACSecret)
+	status, err := s.queries.GetUserStatusByID(ctx, req.UserID)
+	if err != nil {
+		if repository.IsNoRows(err) {
+			return nil // Unknown account: behave identically to the success path.
+		}
+		return fmt.Errorf("looking up user: %w", err)
+	}
+	if status != string(domain.StatusPendingTutorConsent) {
+		return nil // Not pending (active/suspended/deleted): nothing to do, no email.
+	}
+
+	rawToken, err := generateOpaqueToken()
+	if err != nil {
+		return fmt.Errorf("generating token: %w", err)
+	}
+	tokenHash := crypto.GenerateHMAC([]byte(rawToken), s.cfg.HMACSecret)
+	expiresAt := time.Now().UTC().Add(s.tutorConsentTokenTTL)
 
 	tx, err := s.queries.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelSerializable})
 	if err != nil {
@@ -373,14 +448,86 @@ func (s *Service) SubmitTutorConsent(ctx context.Context, req TutorConsentReques
 	defer func() { _ = tx.Rollback() }()
 	qtx := s.queries.WithTx(tx)
 
-	if err := qtx.InsertTutorConsent(ctx, repository.InsertTutorConsentParams{
+	if err := qtx.DeleteUnverifiedTutorConsentTokensForUser(ctx, req.UserID); err != nil {
+		return fmt.Errorf("clearing previous tutor consent tokens: %w", err)
+	}
+	if err := qtx.InsertTutorConsentToken(ctx, repository.InsertTutorConsentTokenParams{
 		ID:                   uuid.New(),
 		UserID:               req.UserID,
 		TutorName:            strings.TrimSpace(req.TutorName),
 		TutorEmail:           strings.ToLower(strings.TrimSpace(req.TutorEmail)),
 		PrivacyNoticeVersion: req.PrivacyNoticeVersion,
-		AcceptedAt:           time.Now().UTC(),
-		AcceptanceIP:         acceptanceIP,
+		TokenHash:            tokenHash,
+		RequestedIP:          requestedIP,
+		RequestedUserAgent:   userAgent,
+		CryptoKeyVersion:     1,
+		ExpiresAt:            expiresAt,
+		EncryptionKey:        s.cfg.EncryptionKey,
+	}); err != nil {
+		return fmt.Errorf("inserting tutor consent token: %w", err)
+	}
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("committing tutor consent token: %w", err)
+	}
+
+	// Email is sent AFTER commit — never do network I/O inside a DB transaction.
+	tutorEmail := strings.ToLower(strings.TrimSpace(req.TutorEmail))
+	link := s.tutorConsentVerifyURL + "?token=" + rawToken
+	subject := "Verificación de consentimiento — Plataforma USBI"
+	body := buildTutorConsentEmail(strings.TrimSpace(req.TutorName), link, s.tutorConsentTokenTTL)
+	if err := s.mailer.Send(ctx, tutorEmail, subject, body); err != nil {
+		return fmt.Errorf("%w: %v", ErrMailSend, err)
+	}
+	return nil
+}
+
+// VerifyTutorConsent completes the tutor double opt-in. It validates the token
+// the tutor clicked, records the click as legal consent evidence (tutor_consents
+// row + verified token), and activates the minor's account. The click's IP and
+// user-agent are the binding evidence — not those captured at form submission.
+func (s *Service) VerifyTutorConsent(ctx context.Context, rawToken string, clickIP net.IP, userAgent string) error {
+	if strings.TrimSpace(rawToken) == "" {
+		return ErrTutorTokenInvalid
+	}
+	if clickIP == nil {
+		clickIP = net.ParseIP("0.0.0.0")
+	}
+	tokenHash := crypto.GenerateHMAC([]byte(rawToken), s.cfg.HMACSecret)
+
+	tx, err := s.queries.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelSerializable})
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+	qtx := s.queries.WithTx(tx)
+
+	row, err := qtx.GetTutorConsentTokenByHashForUpdate(ctx, tokenHash, s.cfg.EncryptionKey)
+	if err != nil {
+		if repository.IsNoRows(err) {
+			return ErrTutorTokenInvalid
+		}
+		return fmt.Errorf("looking up tutor consent token: %w", err)
+	}
+	if row.VerifiedAt.Valid {
+		return ErrTutorTokenUsed
+	}
+	if time.Now().UTC().After(row.ExpiresAt) {
+		return ErrTutorTokenExpired
+	}
+
+	tutorEmail := strings.ToLower(strings.TrimSpace(row.TutorEmail))
+	signaturePayload := []byte(row.UserID.String() + "|" + tutorEmail + "|" + row.PrivacyNoticeVersion)
+	signature := crypto.GenerateHMAC(signaturePayload, s.cfg.HMACSecret)
+	now := time.Now().UTC()
+
+	if err := qtx.InsertTutorConsent(ctx, repository.InsertTutorConsentParams{
+		ID:                   uuid.New(),
+		UserID:               row.UserID,
+		TutorName:            strings.TrimSpace(row.TutorName),
+		TutorEmail:           tutorEmail,
+		PrivacyNoticeVersion: row.PrivacyNoticeVersion,
+		AcceptedAt:           now,
+		AcceptanceIP:         clickIP,
 		AcceptanceUserAgent:  userAgent,
 		ConsentSignature:     signature,
 		CryptoKeyVersion:     1,
@@ -388,10 +535,39 @@ func (s *Service) SubmitTutorConsent(ctx context.Context, req TutorConsentReques
 	}); err != nil {
 		return fmt.Errorf("inserting tutor consent: %w", err)
 	}
-	if err := qtx.ActivateTutorConsentUser(ctx, req.UserID); err != nil {
+	if err := qtx.MarkTutorConsentTokenVerified(ctx, repository.MarkTutorConsentTokenVerifiedParams{
+		ID:                    row.ID,
+		VerifiedAt:            now,
+		VerificationIP:        clickIP,
+		VerificationUserAgent: userAgent,
+	}); err != nil {
+		return fmt.Errorf("marking tutor consent token verified: %w", err)
+	}
+	if err := qtx.ActivateTutorConsentUser(ctx, row.UserID); err != nil {
 		return fmt.Errorf("activating tutor consent user: %w", err)
 	}
 	return tx.Commit()
+}
+
+// buildTutorConsentEmail renders the Spanish plain-text verification email.
+func buildTutorConsentEmail(tutorName, link string, ttl time.Duration) string {
+	greeting := "Estimado(a) tutor(a):"
+	if tutorName != "" {
+		greeting = "Estimado(a) " + tutorName + ":"
+	}
+	hours := strconv.Itoa(int(ttl.Hours()))
+	return greeting + "\n\n" +
+		"Un menor de edad le ha registrado como su tutor o tutora en la plataforma " +
+		"USBI de la Universidad Veracruzana y proporcionó este correo para solicitar " +
+		"su consentimiento sobre el tratamiento de sus datos personales.\n\n" +
+		"Para autorizar la creación de la cuenta, abra el siguiente enlace dentro de " +
+		"las próximas " + hours + " horas:\n\n" +
+		link + "\n\n" +
+		"Al abrir el enlace se registrarán la fecha, la hora y la dirección IP de su " +
+		"confirmación como evidencia del consentimiento otorgado.\n\n" +
+		"Si usted no reconoce esta solicitud, ignore este mensaje: la cuenta no se " +
+		"activará y el enlace caducará automáticamente.\n\n" +
+		"— Plataforma USBI, Universidad Veracruzana"
 }
 
 // SubmitArcoRequest records an ARCO request from the user.
@@ -408,10 +584,7 @@ func (s *Service) SubmitArcoRequest(ctx context.Context, userID uuid.UUID, req A
 	evidenceHash := crypto.GenerateHMAC(payload, s.cfg.HMACSecret)
 	requestID := uuid.New()
 
-	// Since database schema allows NULL for user_id to preserve record after deletion,
-	// sqlc generated user_id as pgtype.UUID or uuid.NullUUID.
-	// sqlc uses pgtype by default in v2 unless configured otherwise. Let's check repository types.
-	// Actually we should just pass it, assuming repository.InsertArcoRequestParams has UserID: uuid.NullUUID.
+	// user_id is nullable so the record survives pseudonymization after deletion.
 	err := s.queries.InsertArcoRequest(ctx, repository.InsertArcoRequestParams{
 		ID:            requestID,
 		UserID:        uuid.NullUUID{UUID: userID, Valid: true},
@@ -465,7 +638,7 @@ func (s *Service) ListPendingArcoRequests(ctx context.Context, actor domain.JWTC
 	return ArcoPendingListDTO{Items: items}, nil
 }
 
-func (s *Service) ResolveArcoRequest(ctx context.Context, actor domain.JWTClaims, requestID uuid.UUID, req ResolveArcoRequestDTO) error {
+func (s *Service) ResolveArcoRequest(ctx context.Context, actor domain.JWTClaims, requestID uuid.UUID, req ResolveArcoRequestDTO, ip, userAgent string) error {
 	if actor.Role != domain.RoleAdmin && actor.Role != domain.RoleDirector {
 		return ErrForbidden
 	}
@@ -493,33 +666,16 @@ func (s *Service) ResolveArcoRequest(ctx context.Context, actor domain.JWTClaims
 		status = "resolved"
 	}
 
+	// An approved cancelación runs the single canonical cancellation routine
+	// shared with the automatic maintenance job (A4), so the two never drift.
 	if req.Approved && arcoReq.RequestType == string(domain.ArcoCancelacion) && arcoReq.UserID.Valid {
-		pseudonymEmail := "deleted-" + arcoReq.UserID.UUID.String() + "@pseudonymized.usbi.invalid"
-		emailHash := crypto.BlindIndexHMAC(pseudonymEmail, s.cfg.BlindIndexSecret)
-
-		if err := qtx.PseudonymizeTutorConsents(ctx, repository.PseudonymizeTutorConsentsParams{
-			UserID:        arcoReq.UserID.UUID,
-			EncryptionKey: s.cfg.EncryptionKey,
+		if err := privacy.CancelUser(ctx, qtx, privacy.CancelParams{
+			UserID:           arcoReq.UserID.UUID,
+			Reason:           "arco_cancelacion",
+			EncryptionKey:    s.cfg.EncryptionKey,
+			BlindIndexSecret: s.cfg.BlindIndexSecret,
 		}); err != nil {
-			return fmt.Errorf("pseudonymizing tutor consents: %w", err)
-		}
-		if err := qtx.PseudonymizeUser(ctx, repository.PseudonymizeUserParams{
-			UserID:          arcoReq.UserID.UUID,
-			PseudonymEmail:  pseudonymEmail,
-			EmailLookupHash: emailHash,
-			EncryptionKey:   s.cfg.EncryptionKey,
-			DeletionReason:  "arco_cancelacion",
-		}); err != nil {
-			return fmt.Errorf("pseudonymizing user: %w", err)
-		}
-		if err := qtx.NullUserInPseudonymizableLedgers(ctx, arcoReq.UserID.UUID); err != nil {
-			return fmt.Errorf("pseudonymizing ledgers: %w", err)
-		}
-		if err := qtx.MarkUserDevicesForWipe(ctx, arcoReq.UserID.UUID); err != nil {
-			return fmt.Errorf("marking devices for wipe: %w", err)
-		}
-		if err := qtx.RevokeRefreshTokensForUser(ctx, arcoReq.UserID.UUID); err != nil {
-			return fmt.Errorf("revoking refresh tokens: %w", err)
+			return fmt.Errorf("cancelling user: %w", err)
 		}
 	}
 
@@ -530,6 +686,26 @@ func (s *Service) ResolveArcoRequest(ctx context.Context, actor domain.JWTClaims
 		ResponseSummary: strings.TrimSpace(req.ResponseSummary),
 	}); err != nil {
 		return fmt.Errorf("resolving arco request: %w", err)
+	}
+
+	// No-Repudio: record the admin decision on this ARCO request (A3). This is
+	// the most sensitive administrative action in the system and previously
+	// wrote nothing to admin_audit_log.
+	var subjectID uuid.UUID
+	if arcoReq.UserID.Valid {
+		subjectID = arcoReq.UserID.UUID
+	}
+	if err := audit.Log(ctx, qtx, audit.Entry{
+		ActorID:    actor.UserID,
+		Action:     "arco.resolve",
+		EntityType: "arco_request",
+		EntityID:   requestID,
+		Before:     map[string]any{"status": "pending", "request_type": arcoReq.RequestType},
+		After:      map[string]any{"status": status, "approved": req.Approved, "subject_user_id": subjectID},
+		IP:         ip,
+		UserAgent:  userAgent,
+	}); err != nil {
+		return fmt.Errorf("logging arco resolution: %w", err)
 	}
 
 	return tx.Commit()
@@ -584,11 +760,10 @@ func (s *Service) generateAccessToken(userID uuid.UUID, role domain.UserRole, to
 }
 
 func (s *Service) issueRefreshToken(ctx context.Context, userID uuid.UUID) (string, time.Time, error) {
-	tokenBytes := make([]byte, 32)
-	if _, err := cryptorand.Read(tokenBytes); err != nil {
+	token, err := generateOpaqueToken()
+	if err != nil {
 		return "", time.Time{}, err
 	}
-	token := base64.RawURLEncoding.EncodeToString(tokenBytes)
 	tokenHash := crypto.GenerateHMAC([]byte(token), s.cfg.HMACSecret)
 	expiresAt := time.Now().UTC().Add(7 * 24 * time.Hour)
 	if err := s.queries.InsertRefreshToken(ctx, repository.InsertRefreshTokenParams{
@@ -600,6 +775,16 @@ func (s *Service) issueRefreshToken(ctx context.Context, userID uuid.UUID) (stri
 		return "", time.Time{}, err
 	}
 	return token, expiresAt, nil
+}
+
+// generateOpaqueToken returns a URL-safe, 256-bit random token. Used for both
+// refresh tokens and tutor-consent verification links.
+func generateOpaqueToken() (string, error) {
+	tokenBytes := make([]byte, 32)
+	if _, err := cryptorand.Read(tokenBytes); err != nil {
+		return "", err
+	}
+	return base64.RawURLEncoding.EncodeToString(tokenBytes), nil
 }
 
 func normalizeIdentifier(value string) string {

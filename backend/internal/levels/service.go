@@ -13,10 +13,10 @@ import (
 	"strings"
 	"time"
 
+	"github.com/altair/usbi-backend/internal/audit"
 	"github.com/altair/usbi-backend/internal/httpjson"
 	"github.com/altair/usbi-backend/internal/repository"
 	"github.com/google/uuid"
-	"github.com/sqlc-dev/pqtype"
 )
 
 var (
@@ -34,7 +34,10 @@ func NewService(repo *repository.Queries) *Service {
 }
 
 func (s *Service) CreateLevel(ctx context.Context, adminID uuid.UUID, req CreateLevelRequest) (LevelResponse, error) {
-	if err := validateLevelInput(req.Title, req.Color, req.SectionID, req.TemplateType, req.Difficulty, req.Content); err != nil {
+	if req.SectionID == uuid.Nil {
+		return LevelResponse{}, ErrValidation
+	}
+	if err := validateLevelInput(req.Title, req.Color, req.TemplateType, req.Difficulty, req.Content); err != nil {
 		return LevelResponse{}, ErrValidation
 	}
 
@@ -78,7 +81,7 @@ func (s *Service) UpdateLevel(ctx context.Context, adminID, levelID uuid.UUID, r
 	if levelID == uuid.Nil {
 		return LevelResponse{}, ErrValidation
 	}
-	if err := validateLevelInput(req.Title, req.Color, uuid.New(), req.TemplateType, req.Difficulty, req.Content); err != nil {
+	if err := validateLevelInput(req.Title, req.Color, req.TemplateType, req.Difficulty, req.Content); err != nil {
 		return LevelResponse{}, ErrValidation
 	}
 
@@ -617,8 +620,8 @@ func CalculateXP(difficulty int32, attemptNumber int32, completed bool) int32 {
 	}
 }
 
-func validateLevelInput(title, color string, sectionID uuid.UUID, templateType string, difficulty int32, content json.RawMessage) error {
-	if strings.TrimSpace(title) == "" || strings.TrimSpace(color) == "" || sectionID == uuid.Nil || templateType == "" {
+func validateLevelInput(title, color, templateType string, difficulty int32, content json.RawMessage) error {
+	if strings.TrimSpace(title) == "" || strings.TrimSpace(color) == "" || templateType == "" {
 		log.Printf("validateLevelInput failed: basic empty fields")
 		return ErrValidation
 	}
@@ -775,7 +778,8 @@ func validatePuzzleContent(content json.RawMessage) error {
 		Seed   *int32 `json:"seed,omitempty"`
 	}
 	if err := decodeStrictContent(content, &payload); err != nil {
-		log.Printf("validatePuzzleContent unmarshal error: %v, content: %s", err, string(content))
+		// Never log the raw content: it can be up to 5 MB and is attacker-influenced (B4).
+		log.Printf("validatePuzzleContent unmarshal error: %v", err)
 		return ErrValidation
 	}
 	if strings.TrimSpace(payload.Phrase) == "" {
@@ -789,6 +793,9 @@ func validatePuzzleContent(content json.RawMessage) error {
 	return nil
 }
 
+// maxCrosswordWords bounds the crossword builder's cubic-ish placement search.
+const maxCrosswordWords = 30
+
 func validateCrosswordContent(content json.RawMessage) error {
 	type word struct {
 		Word string `json:"word"`
@@ -797,7 +804,10 @@ func validateCrosswordContent(content json.RawMessage) error {
 	var payload struct {
 		Words []word `json:"words"`
 	}
-	if err := decodeStrictContent(content, &payload); err != nil || len(payload.Words) < 2 {
+	// Cap the word count: canBuildConnectedCrossword is ~O(N^3·L^2), so a payload
+	// of hundreds of short words (well under the 5 MB body cap) would peg the
+	// single vCPU synchronously inside the handler (audit finding B6).
+	if err := decodeStrictContent(content, &payload); err != nil || len(payload.Words) < 2 || len(payload.Words) > maxCrosswordWords {
 		return ErrValidation
 	}
 	words := make([]crosswordCandidate, 0, len(payload.Words))
@@ -1121,37 +1131,18 @@ func isHTTPURL(rawURL string) bool {
 	return (parsed.Scheme == "http" || parsed.Scheme == "https") && parsed.Host != ""
 }
 
+// logAdminAudit is a thin wrapper over the shared audit package, kept so the
+// 10 existing call sites in this file stay unchanged. Content admin actions have
+// no per-request IP/user-agent here, so audit.Log fills its placeholders.
 func logAdminAudit(ctx context.Context, repo *repository.Queries, actorID uuid.UUID, action, entityType string, entityID uuid.UUID, beforeState, afterState any) error {
-	before, err := auditState(beforeState)
-	if err != nil {
-		return err
-	}
-	after, err := auditState(afterState)
-	if err != nil {
-		return err
-	}
-	return repo.LogAdminAudit(ctx, repository.LogAdminAuditParams{
-		ID:          uuid.New(),
-		ActorUserID: uuid.NullUUID{UUID: actorID, Valid: actorID != uuid.Nil},
-		Action:      action,
-		EntityType:  entityType,
-		EntityID:    uuid.NullUUID{UUID: entityID, Valid: entityID != uuid.Nil},
-		BeforeState: before,
-		AfterState:  after,
-		IpAddress:   "0.0.0.0",
-		UserAgent:   "backend-service",
+	return audit.Log(ctx, repo, audit.Entry{
+		ActorID:    actorID,
+		Action:     action,
+		EntityType: entityType,
+		EntityID:   entityID,
+		Before:     beforeState,
+		After:      afterState,
 	})
-}
-
-func auditState(value any) (pqtype.NullRawMessage, error) {
-	if value == nil {
-		return pqtype.NullRawMessage{RawMessage: json.RawMessage(`{}`), Valid: true}, nil
-	}
-	data, err := json.Marshal(value)
-	if err != nil {
-		return pqtype.NullRawMessage{}, err
-	}
-	return pqtype.NullRawMessage{RawMessage: data, Valid: true}, nil
 }
 
 func levelAuditPayload(level LevelResponse) map[string]any {

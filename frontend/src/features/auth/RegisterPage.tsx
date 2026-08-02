@@ -85,6 +85,14 @@ export default function RegisterPage() {
           tutor_email: tutorEmail,
           privacy_notice_version: privacyNoticeVersion,
         });
+        navigate('/login', {
+          state: {
+            message:
+              'Registro recibido. Enviamos un correo de verificación al tutor. ' +
+              'La cuenta se activará cuando el tutor confirme el consentimiento desde ese correo.',
+          },
+        });
+        return;
       }
 
       navigate('/login', { state: { message: 'Registro exitoso. Ahora puedes iniciar sesión.' } });
@@ -229,8 +237,7 @@ export default function RegisterPage() {
           <Button
             type="submit"
             size="lg"
-            className="w-full bg-green-500 hover:bg-green-600 text-white font-bold"
-            style={{ backgroundColor: '#22c55e', color: 'white' }}
+            className="w-full font-bold"
             disabled={loading}
           >
             {loading ? 'Registrando...' : 'Registrar'}
@@ -238,7 +245,13 @@ export default function RegisterPage() {
         </form>
         
         <div className="text-center text-sm">
-          <Link to="/login" style={{ color: 'var(--color-primary)' }} className="hover:underline">
+          {/* inline-flex + padding lets min-height (WCAG 2.5.5, C6) apply — a
+              plain inline <a> ignores min-height entirely. */}
+          <Link
+            to="/login"
+            style={{ color: 'var(--color-primary)' }}
+            className="inline-flex items-center justify-center py-2 hover:underline"
+          >
             ¿Ya tienes cuenta? Inicia sesión
           </Link>
         </div>

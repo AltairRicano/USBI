@@ -120,13 +120,17 @@ function LocalContentSection({ navigate }: { navigate: NavigateFunction }) {
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
           {localLevels.map((lvl: any) => (
             <div key={lvl.metadata.id} className="border border-[--color-border] p-4 rounded-lg flex flex-col gap-2 relative bg-black/5 dark:bg-white/5">
-              <button 
-                onClick={() => handleDelete(lvl.metadata.id)} 
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={() => handleDelete(lvl.metadata.id)}
                 className="absolute top-2 right-2 text-red-500 hover:text-red-700 font-bold"
+                aria-label="Eliminar nivel"
                 title="Eliminar nivel"
               >
                 ✕
-              </button>
+              </Button>
               <div className="flex items-center gap-2">
                 <div className="w-8 h-8 rounded-full flex items-center justify-center text-white" style={{ backgroundColor: lvl.metadata.color || '#4caf50' }}>
                   <TemplateIcon type={lvl.metadata.template_type} />
@@ -370,6 +374,9 @@ export default function DashboardPage() {
                   </Button>
                   <Button variant="outline" onClick={() => { setIsMenuOpen(false); navigate('/maker'); }} className="justify-start w-full text-lg py-6">
                     Maker
+                  </Button>
+                  <Button variant="outline" onClick={() => { setIsMenuOpen(false); navigate('/settings'); }} className="justify-start w-full text-lg py-6">
+                    Configuración
                   </Button>
                   {canManageContent && (
                     <Button variant="primary" onClick={() => { setIsMenuOpen(false); navigate('/admin'); }} className="justify-start w-full text-lg py-6">

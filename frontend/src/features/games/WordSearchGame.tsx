@@ -77,12 +77,19 @@ export function WordSearchGame({ words, width = 10, height = 10, seed = 1234, on
     <Card className="w-full max-w-4xl mx-auto mt-8 flex flex-col md:flex-row gap-4">
       <CardContent className="flex-1 p-0">
         <div className="w-full rounded-xl overflow-hidden relative" style={{ minHeight: '500px' }}>
-           <PhaserGame ref={phaserRef} config={gameConfig} onGameReady={handleGameReady} />
+           <PhaserGame
+             ref={phaserRef}
+             config={gameConfig}
+             onGameReady={handleGameReady}
+             ariaLabel="Sopa de letras interactiva. Use las flechas para moverse y Enter para marcar el inicio y fin de una palabra."
+           />
         </div>
       </CardContent>
       <div className="w-full md:w-64 p-6 border-l border-[--color-border] flex flex-col gap-4">
         <CardTitle className="text-xl">Palabras a buscar</CardTitle>
-        <p className="font-bold text-[--color-primary]">Score: {state.score}</p>
+        {/* aria-live mirrors the score already shown here (C5), so a screen
+            reader announces it changing without the user navigating to it. */}
+        <p aria-live="polite" className="font-bold text-[--color-primary]">Score: {state.score}</p>
         <ul className="flex flex-col gap-2">
           {state.words.map((word, i) => (
             <li 

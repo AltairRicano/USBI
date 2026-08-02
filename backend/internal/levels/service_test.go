@@ -277,7 +277,7 @@ func TestValidateLevelInput_TemplateContracts(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			err := validateLevelInput("Nivel", "#18529D", uuid.New(), tt.templateType, 1, tt.content)
+			err := validateLevelInput("Nivel", "#18529D", tt.templateType, 1, tt.content)
 			if (err != nil) != tt.wantErr {
 				t.Fatalf("validateLevelInput() error = %v, wantErr %v", err, tt.wantErr)
 			}

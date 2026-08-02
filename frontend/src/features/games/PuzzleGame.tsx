@@ -4,9 +4,11 @@ import { PuzzleEngine, PuzzleState } from '@usbi/engine';
 import { Card, CardTitle } from '../../components/ui/Card';
 import { Reorder } from 'framer-motion';
 
+// -700 shades (not the original -500s): verified white-text contrast >= 4.5:1
+// for every color in the palette (audit finding C8 — bg-yellow-500 was 1.92:1).
 const COLORS = [
-  'bg-red-500', 'bg-blue-500', 'bg-green-500', 'bg-yellow-500', 
-  'bg-purple-500', 'bg-pink-500', 'bg-indigo-500', 'bg-teal-500'
+  'bg-red-700', 'bg-blue-700', 'bg-green-700', 'bg-yellow-700',
+  'bg-purple-700', 'bg-pink-700', 'bg-indigo-700', 'bg-teal-700'
 ];
 
 interface PuzzleGameProps {

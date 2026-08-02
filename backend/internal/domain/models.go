@@ -69,7 +69,11 @@ type LevelAttemptItem struct {
 	AttemptDate   string    `json:"attempt_date"` // ISO 8601 date: YYYY-MM-DD
 	AttemptNumber int       `json:"attempt_number"`
 	XPAwarded     int       `json:"xp_awarded"` // Untrusted. Backend recalculates.
-	Completed     bool      `json:"completed"`
+	// Score is the in-game score for this attempt (NOT XP). It feeds
+	// player_progress.best_score exactly like the online path; XP is always
+	// recalculated server-side and never derived from Score. Must be >= 0.
+	Score     int  `json:"score"`
+	Completed bool `json:"completed"`
 }
 
 // SyncPayload is the strictly typed offline progress packet.

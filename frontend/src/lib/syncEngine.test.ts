@@ -14,8 +14,8 @@ describe('buildCanonicalSigningPayload', () => {
       ...base,
       payload: {
         level_attempts: [
-          { level_id: '018fd2b4-3f0d-7c00-8000-000000000005', attempt_date: '2026-07-20', attempt_number: 1, xp_awarded: 0, completed: true },
-          { level_id: '018fd2b4-3f0d-7c00-8000-000000000004', attempt_date: '2026-07-19', attempt_number: 1, xp_awarded: 0, completed: false },
+          { level_id: '018fd2b4-3f0d-7c00-8000-000000000005', attempt_date: '2026-07-20', attempt_number: 1, xp_awarded: 0, score: 42, completed: true },
+          { level_id: '018fd2b4-3f0d-7c00-8000-000000000004', attempt_date: '2026-07-19', attempt_number: 1, xp_awarded: 0, score: 0, completed: false },
         ],
         daily_streak_dates: ['2026-07-20', '2026-07-19'],
         badge_ids_earned: ['018fd2b4-3f0d-7c00-8000-000000000007', '018fd2b4-3f0d-7c00-8000-000000000006'],

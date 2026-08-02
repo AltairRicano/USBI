@@ -1,7 +1,6 @@
 package levels
 
 import (
-	"encoding/json"
 	"errors"
 	"log"
 	"net/http"
@@ -9,6 +8,7 @@ import (
 
 	"github.com/altair/usbi-backend/internal/domain"
 	"github.com/altair/usbi-backend/internal/httpjson"
+	"github.com/altair/usbi-backend/internal/httpproblem"
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 )
@@ -24,27 +24,27 @@ func NewHandler(svc *Service) *Handler {
 func (h *Handler) CreateLevel(w http.ResponseWriter, r *http.Request) {
 	claims, ok := r.Context().Value(domain.ClaimsKey).(*domain.JWTClaims)
 	if !ok || !canManageContent(claims.Role) {
-		writeProblem(w, r, http.StatusForbidden, "forbidden", "Forbidden", "Only content managers can create levels")
+		httpproblem.WriteProblem(w, r, http.StatusForbidden, "forbidden", "Forbidden", "Only content managers can create levels")
 		return
 	}
 
 	var req CreateLevelRequest
 	if err := httpjson.DecodeStrict(r.Body, &req); err != nil {
-		writeDecodeProblem(w, r, err)
+		httpproblem.WriteDecodeProblem(w, r, err)
 		return
 	}
 
 	resp, err := h.svc.CreateLevel(r.Context(), claims.UserID, req)
 	if err != nil {
 		if errors.Is(err, ErrValidation) {
-			writeProblem(w, r, http.StatusUnprocessableEntity, "validation-error", "Validation Error", err.Error())
+			httpproblem.WriteProblem(w, r, http.StatusUnprocessableEntity, "validation-error", "Validation Error", err.Error())
 		} else {
-			writeProblem(w, r, http.StatusInternalServerError, "internal-error", "Internal Server Error", "Could not create level")
+			httpproblem.WriteProblem(w, r, http.StatusInternalServerError, "internal-error", "Internal Server Error", "Could not create level")
 		}
 		return
 	}
 
-	writeJSON(w, http.StatusCreated, resp)
+	httpproblem.WriteJSON(w, http.StatusCreated, resp)
 }
 
 func (h *Handler) ListLevels(w http.ResponseWriter, r *http.Request) {
@@ -55,7 +55,7 @@ func (h *Handler) ListLevels(w http.ResponseWriter, r *http.Request) {
 	if c := q.Get("cursor"); c != "" {
 		parsed, err := uuid.Parse(c)
 		if err != nil {
-			writeProblem(w, r, http.StatusBadRequest, "bad-request", "Bad Request", "cursor must be a valid UUID")
+			httpproblem.WriteProblem(w, r, http.StatusBadRequest, "bad-request", "Bad Request", "cursor must be a valid UUID")
 			return
 		}
 		cursor = parsed
@@ -65,7 +65,7 @@ func (h *Handler) ListLevels(w http.ResponseWriter, r *http.Request) {
 	if ps := q.Get("page_size"); ps != "" {
 		n, err := strconv.Atoi(ps)
 		if err != nil || n < 1 || n > 50 {
-			writeProblem(w, r, http.StatusBadRequest, "bad-request", "Bad Request", "page_size must be between 1 and 50")
+			httpproblem.WriteProblem(w, r, http.StatusBadRequest, "bad-request", "Bad Request", "page_size must be between 1 and 50")
 			return
 		}
 		pageSize = int32(n)
@@ -75,7 +75,7 @@ func (h *Handler) ListLevels(w http.ResponseWriter, r *http.Request) {
 	if rawSectionID := q.Get("section_id"); rawSectionID != "" {
 		parsed, err := uuid.Parse(rawSectionID)
 		if err != nil {
-			writeProblem(w, r, http.StatusBadRequest, "bad-request", "Bad Request", "section_id must be a valid UUID")
+			httpproblem.WriteProblem(w, r, http.StatusBadRequest, "bad-request", "Bad Request", "section_id must be a valid UUID")
 			return
 		}
 		sectionID = parsed
@@ -85,11 +85,11 @@ func (h *Handler) ListLevels(w http.ResponseWriter, r *http.Request) {
 
 	page, err := h.svc.ListLevels(r.Context(), cursor, sectionID, includeUnpublished, pageSize)
 	if err != nil {
-		writeProblem(w, r, http.StatusInternalServerError, "internal-error", "Internal Server Error", "Could not retrieve levels")
+		httpproblem.WriteProblem(w, r, http.StatusInternalServerError, "internal-error", "Internal Server Error", "Could not retrieve levels")
 		return
 	}
 
-	writeJSON(w, http.StatusOK, page)
+	httpproblem.WriteJSON(w, http.StatusOK, page)
 }
 
 func (h *Handler) GetLevel(w http.ResponseWriter, r *http.Request) {
@@ -105,13 +105,13 @@ func (h *Handler) GetLevel(w http.ResponseWriter, r *http.Request) {
 		writeServiceError(w, r, err, "Could not retrieve level")
 		return
 	}
-	writeJSON(w, http.StatusOK, resp)
+	httpproblem.WriteJSON(w, http.StatusOK, resp)
 }
 
 func (h *Handler) UpdateLevel(w http.ResponseWriter, r *http.Request) {
 	claims, ok := r.Context().Value(domain.ClaimsKey).(*domain.JWTClaims)
 	if !ok || !canManageContent(claims.Role) {
-		writeProblem(w, r, http.StatusForbidden, "forbidden", "Forbidden", "Only content managers can update levels")
+		httpproblem.WriteProblem(w, r, http.StatusForbidden, "forbidden", "Forbidden", "Only content managers can update levels")
 		return
 	}
 
@@ -122,7 +122,7 @@ func (h *Handler) UpdateLevel(w http.ResponseWriter, r *http.Request) {
 
 	var req UpdateLevelRequest
 	if err := httpjson.DecodeStrict(r.Body, &req); err != nil {
-		writeDecodeProblem(w, r, err)
+		httpproblem.WriteDecodeProblem(w, r, err)
 		return
 	}
 
@@ -131,13 +131,13 @@ func (h *Handler) UpdateLevel(w http.ResponseWriter, r *http.Request) {
 		writeServiceError(w, r, err, "Could not update level")
 		return
 	}
-	writeJSON(w, http.StatusOK, resp)
+	httpproblem.WriteJSON(w, http.StatusOK, resp)
 }
 
 func (h *Handler) PublishLevel(w http.ResponseWriter, r *http.Request) {
 	claims, ok := r.Context().Value(domain.ClaimsKey).(*domain.JWTClaims)
 	if !ok || !canManageContent(claims.Role) {
-		writeProblem(w, r, http.StatusForbidden, "forbidden", "Forbidden", "Only content managers can publish levels")
+		httpproblem.WriteProblem(w, r, http.StatusForbidden, "forbidden", "Forbidden", "Only content managers can publish levels")
 		return
 	}
 
@@ -151,13 +151,13 @@ func (h *Handler) PublishLevel(w http.ResponseWriter, r *http.Request) {
 		writeServiceError(w, r, err, "Could not publish level")
 		return
 	}
-	writeJSON(w, http.StatusOK, resp)
+	httpproblem.WriteJSON(w, http.StatusOK, resp)
 }
 
 func (h *Handler) UnpublishLevel(w http.ResponseWriter, r *http.Request) {
 	claims, ok := r.Context().Value(domain.ClaimsKey).(*domain.JWTClaims)
 	if !ok || !canManageContent(claims.Role) {
-		writeProblem(w, r, http.StatusForbidden, "forbidden", "Forbidden", "Only content managers can unpublish levels")
+		httpproblem.WriteProblem(w, r, http.StatusForbidden, "forbidden", "Forbidden", "Only content managers can unpublish levels")
 		return
 	}
 
@@ -171,13 +171,13 @@ func (h *Handler) UnpublishLevel(w http.ResponseWriter, r *http.Request) {
 		writeServiceError(w, r, err, "Could not unpublish level")
 		return
 	}
-	writeJSON(w, http.StatusOK, resp)
+	httpproblem.WriteJSON(w, http.StatusOK, resp)
 }
 
 func (h *Handler) ArchiveLevel(w http.ResponseWriter, r *http.Request) {
 	claims, ok := r.Context().Value(domain.ClaimsKey).(*domain.JWTClaims)
 	if !ok || !canArchiveContent(claims.Role) {
-		writeProblem(w, r, http.StatusForbidden, "forbidden", "Forbidden", "Only admins or directors can archive levels")
+		httpproblem.WriteProblem(w, r, http.StatusForbidden, "forbidden", "Forbidden", "Only admins or directors can archive levels")
 		return
 	}
 
@@ -191,13 +191,13 @@ func (h *Handler) ArchiveLevel(w http.ResponseWriter, r *http.Request) {
 		writeServiceError(w, r, err, "Could not archive level")
 		return
 	}
-	writeJSON(w, http.StatusOK, resp)
+	httpproblem.WriteJSON(w, http.StatusOK, resp)
 }
 
 func (h *Handler) CompleteLevel(w http.ResponseWriter, r *http.Request) {
 	claims, ok := r.Context().Value(domain.ClaimsKey).(*domain.JWTClaims)
 	if !ok {
-		writeProblem(w, r, http.StatusUnauthorized, "unauthorized", "Unauthorized", "Missing JWT claims in context")
+		httpproblem.WriteProblem(w, r, http.StatusUnauthorized, "unauthorized", "Unauthorized", "Missing JWT claims in context")
 		return
 	}
 
@@ -208,7 +208,7 @@ func (h *Handler) CompleteLevel(w http.ResponseWriter, r *http.Request) {
 
 	var req CompleteLevelRequest
 	if err := httpjson.DecodeStrict(r.Body, &req); err != nil {
-		writeDecodeProblem(w, r, err)
+		httpproblem.WriteDecodeProblem(w, r, err)
 		return
 	}
 
@@ -217,13 +217,13 @@ func (h *Handler) CompleteLevel(w http.ResponseWriter, r *http.Request) {
 		writeServiceError(w, r, err, "Could not complete level")
 		return
 	}
-	writeJSON(w, http.StatusOK, resp)
+	httpproblem.WriteJSON(w, http.StatusOK, resp)
 }
 
 func (h *Handler) GetProfileProgress(w http.ResponseWriter, r *http.Request) {
 	claims, ok := r.Context().Value(domain.ClaimsKey).(*domain.JWTClaims)
 	if !ok {
-		writeProblem(w, r, http.StatusUnauthorized, "unauthorized", "Unauthorized", "Missing JWT claims in context")
+		httpproblem.WriteProblem(w, r, http.StatusUnauthorized, "unauthorized", "Unauthorized", "Missing JWT claims in context")
 		return
 	}
 
@@ -232,19 +232,19 @@ func (h *Handler) GetProfileProgress(w http.ResponseWriter, r *http.Request) {
 		writeServiceError(w, r, err, "Could not retrieve progress")
 		return
 	}
-	writeJSON(w, http.StatusOK, resp)
+	httpproblem.WriteJSON(w, http.StatusOK, resp)
 }
 
 func (h *Handler) CreateSection(w http.ResponseWriter, r *http.Request) {
 	claims, ok := r.Context().Value(domain.ClaimsKey).(*domain.JWTClaims)
 	if !ok || !canManageContent(claims.Role) {
-		writeProblem(w, r, http.StatusForbidden, "forbidden", "Forbidden", "Only content managers can create sections")
+		httpproblem.WriteProblem(w, r, http.StatusForbidden, "forbidden", "Forbidden", "Only content managers can create sections")
 		return
 	}
 
 	var req CreateSectionRequest
 	if err := httpjson.DecodeStrict(r.Body, &req); err != nil {
-		writeDecodeProblem(w, r, err)
+		httpproblem.WriteDecodeProblem(w, r, err)
 		return
 	}
 
@@ -254,7 +254,7 @@ func (h *Handler) CreateSection(w http.ResponseWriter, r *http.Request) {
 		writeServiceError(w, r, err, "Could not create section")
 		return
 	}
-	writeJSON(w, http.StatusCreated, resp)
+	httpproblem.WriteJSON(w, http.StatusCreated, resp)
 }
 
 func (h *Handler) ListSections(w http.ResponseWriter, r *http.Request) {
@@ -263,16 +263,16 @@ func (h *Handler) ListSections(w http.ResponseWriter, r *http.Request) {
 
 	resp, err := h.svc.ListSections(r.Context(), includeUnpublished)
 	if err != nil {
-		writeProblem(w, r, http.StatusInternalServerError, "internal-error", "Internal Server Error", "Could not retrieve sections")
+		httpproblem.WriteProblem(w, r, http.StatusInternalServerError, "internal-error", "Internal Server Error", "Could not retrieve sections")
 		return
 	}
-	writeJSON(w, http.StatusOK, resp)
+	httpproblem.WriteJSON(w, http.StatusOK, resp)
 }
 
 func (h *Handler) UpdateSection(w http.ResponseWriter, r *http.Request) {
 	claims, ok := r.Context().Value(domain.ClaimsKey).(*domain.JWTClaims)
 	if !ok || !canManageContent(claims.Role) {
-		writeProblem(w, r, http.StatusForbidden, "forbidden", "Forbidden", "Only content managers can update sections")
+		httpproblem.WriteProblem(w, r, http.StatusForbidden, "forbidden", "Forbidden", "Only content managers can update sections")
 		return
 	}
 
@@ -283,7 +283,7 @@ func (h *Handler) UpdateSection(w http.ResponseWriter, r *http.Request) {
 
 	var req UpdateSectionRequest
 	if err := httpjson.DecodeStrict(r.Body, &req); err != nil {
-		writeDecodeProblem(w, r, err)
+		httpproblem.WriteDecodeProblem(w, r, err)
 		return
 	}
 
@@ -292,13 +292,13 @@ func (h *Handler) UpdateSection(w http.ResponseWriter, r *http.Request) {
 		writeServiceError(w, r, err, "Could not update section")
 		return
 	}
-	writeJSON(w, http.StatusOK, resp)
+	httpproblem.WriteJSON(w, http.StatusOK, resp)
 }
 
 func (h *Handler) PublishSection(w http.ResponseWriter, r *http.Request) {
 	claims, ok := r.Context().Value(domain.ClaimsKey).(*domain.JWTClaims)
 	if !ok || !canManageContent(claims.Role) {
-		writeProblem(w, r, http.StatusForbidden, "forbidden", "Forbidden", "Only content managers can publish sections")
+		httpproblem.WriteProblem(w, r, http.StatusForbidden, "forbidden", "Forbidden", "Only content managers can publish sections")
 		return
 	}
 
@@ -312,13 +312,13 @@ func (h *Handler) PublishSection(w http.ResponseWriter, r *http.Request) {
 		writeServiceError(w, r, err, "Could not publish section")
 		return
 	}
-	writeJSON(w, http.StatusOK, resp)
+	httpproblem.WriteJSON(w, http.StatusOK, resp)
 }
 
 func (h *Handler) UnpublishSection(w http.ResponseWriter, r *http.Request) {
 	claims, ok := r.Context().Value(domain.ClaimsKey).(*domain.JWTClaims)
 	if !ok || !canManageContent(claims.Role) {
-		writeProblem(w, r, http.StatusForbidden, "forbidden", "Forbidden", "Only content managers can unpublish sections")
+		httpproblem.WriteProblem(w, r, http.StatusForbidden, "forbidden", "Forbidden", "Only content managers can unpublish sections")
 		return
 	}
 
@@ -332,13 +332,13 @@ func (h *Handler) UnpublishSection(w http.ResponseWriter, r *http.Request) {
 		writeServiceError(w, r, err, "Could not unpublish section")
 		return
 	}
-	writeJSON(w, http.StatusOK, resp)
+	httpproblem.WriteJSON(w, http.StatusOK, resp)
 }
 
 func (h *Handler) ArchiveSection(w http.ResponseWriter, r *http.Request) {
 	claims, ok := r.Context().Value(domain.ClaimsKey).(*domain.JWTClaims)
 	if !ok || !canArchiveContent(claims.Role) {
-		writeProblem(w, r, http.StatusForbidden, "forbidden", "Forbidden", "Only admins or directors can archive sections")
+		httpproblem.WriteProblem(w, r, http.StatusForbidden, "forbidden", "Forbidden", "Only admins or directors can archive sections")
 		return
 	}
 
@@ -352,39 +352,28 @@ func (h *Handler) ArchiveSection(w http.ResponseWriter, r *http.Request) {
 		writeServiceError(w, r, err, "Could not archive section")
 		return
 	}
-	writeJSON(w, http.StatusOK, resp)
+	httpproblem.WriteJSON(w, http.StatusOK, resp)
 }
 
 func parseURLUUID(w http.ResponseWriter, r *http.Request, key string) (uuid.UUID, bool) {
 	parsed, err := uuid.Parse(chi.URLParam(r, key))
 	if err != nil {
-		writeProblem(w, r, http.StatusBadRequest, "bad-request", "Bad Request", key+" must be a valid UUID")
+		httpproblem.WriteProblem(w, r, http.StatusBadRequest, "bad-request", "Bad Request", key+" must be a valid UUID")
 		return uuid.Nil, false
 	}
 	return parsed, true
 }
 
-func writeDecodeProblem(w http.ResponseWriter, r *http.Request, err error) {
-	var maxBytesErr *http.MaxBytesError
-	if errors.As(err, &maxBytesErr) {
-		writeProblem(w, r, http.StatusRequestEntityTooLarge, "payload-too-large",
-			"Payload Too Large", "Request body exceeds the configured size limit")
-		return
-	}
-
-	writeProblem(w, r, http.StatusBadRequest, "bad-request", "Bad Request", "Invalid JSON body")
-}
-
 func writeServiceError(w http.ResponseWriter, r *http.Request, err error, fallback string) {
 	switch {
 	case errors.Is(err, ErrValidation):
-		writeProblem(w, r, http.StatusUnprocessableEntity, "validation-error", "Validation Error", err.Error())
+		httpproblem.WriteProblem(w, r, http.StatusUnprocessableEntity, "validation-error", "Validation Error", err.Error())
 	case errors.Is(err, ErrNotFound):
-		writeProblem(w, r, http.StatusNotFound, "not-found", "Not Found", "Resource not found")
+		httpproblem.WriteProblem(w, r, http.StatusNotFound, "not-found", "Not Found", "Resource not found")
 	case errors.Is(err, ErrForbidden):
-		writeProblem(w, r, http.StatusForbidden, "forbidden", "Forbidden", err.Error())
+		httpproblem.WriteProblem(w, r, http.StatusForbidden, "forbidden", "Forbidden", err.Error())
 	default:
-		writeProblem(w, r, http.StatusInternalServerError, "internal-error", "Internal Server Error", fallback)
+		httpproblem.WriteProblem(w, r, http.StatusInternalServerError, "internal-error", "Internal Server Error", fallback)
 	}
 }
 
@@ -394,22 +383,4 @@ func canManageContent(role domain.UserRole) bool {
 
 func canArchiveContent(role domain.UserRole) bool {
 	return role == domain.RoleAdmin || role == domain.RoleDirector
-}
-
-func writeProblem(w http.ResponseWriter, r *http.Request, status int, errorSlug, title, detail string) {
-	w.Header().Set("Content-Type", "application/problem+json")
-	w.WriteHeader(status)
-	_ = json.NewEncoder(w).Encode(domain.ProblemDetails{
-		Type:     "https://api.usbi.edu.mx/errors/" + errorSlug,
-		Title:    title,
-		Status:   status,
-		Detail:   detail,
-		Instance: r.URL.Path,
-	})
-}
-
-func writeJSON(w http.ResponseWriter, status int, v interface{}) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(status)
-	_ = json.NewEncoder(w).Encode(v)
 }

@@ -44,17 +44,29 @@ export function TriviaForm({
           <div className="mt-4 space-y-2">
             {q.options.map((opt: string, optIdx: number) => (
               <div key={optIdx} className="flex gap-2 items-center">
-                <input type="radio" checked={q.correct_index === optIdx} onChange={() => updateQ(qIdx, { correct_index: optIdx })} />
+                <label className="flex items-center gap-1 p-2 cursor-pointer">
+                  <input type="radio" checked={q.correct_index === optIdx} onChange={() => updateQ(qIdx, { correct_index: optIdx })} />
+                  <span className="sr-only">Marcar opción {optIdx + 1} como correcta</span>
+                </label>
                 <Input label="" className="flex-1" value={opt} onChange={(event: ChangeEvent<HTMLInputElement>) => {
                   const newOpts = [...q.options];
                   newOpts[optIdx] = event.target.value;
                   updateQ(qIdx, { options: newOpts });
                 }} required />
                 {q.options.length > 2 && (
-                  <button type="button" onClick={() => {
-                    const newOpts = q.options.filter((_, i) => i !== optIdx);
-                    updateQ(qIdx, { options: newOpts, correct_index: Math.min(q.correct_index, newOpts.length - 1) });
-                  }} className="text-red-500 px-2">X</button>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    aria-label={`Eliminar opción ${optIdx + 1}`}
+                    onClick={() => {
+                      const newOpts = q.options.filter((_, i) => i !== optIdx);
+                      updateQ(qIdx, { options: newOpts, correct_index: Math.min(q.correct_index, newOpts.length - 1) });
+                    }}
+                    className="text-red-500"
+                  >
+                    X
+                  </Button>
                 )}
               </div>
             ))}

@@ -30,6 +30,12 @@ export const SnakeLadderGame: React.FC<SnakeLadderGameProps> = ({ level, onCompl
   const [isGameOver, setIsGameOver] = useState(false);
   const [canRoll, setCanRoll] = useState(false);
   const [winner, setWinner] = useState<string | null>(null);
+  // Mirrors engine.state.message/lastRoll — today drawn ONLY on the Phaser
+  // canvas (messageText/diceText) — into the DOM so a screen reader can
+  // announce turn/dice-roll/correct-incorrect changes (audit finding C5).
+  // engine.state is a plain mutable object (no subscribe API), so it's
+  // sampled on the same interval already used below for canRoll.
+  const [liveMessage, setLiveMessage] = useState(engine.state.message);
 
   useEffect(() => {
     // Notify Tauri that game started
@@ -84,6 +90,7 @@ export const SnakeLadderGame: React.FC<SnakeLadderGameProps> = ({ level, onCompl
      // Re-check roll button state periodically since scene drives it
      const interval = setInterval(() => {
          setCanRoll(engine.state.state === 'player_turn' && !readyScene.isAnimating);
+         setLiveMessage(engine.state.message);
      }, 100);
 
      return () => {
@@ -144,6 +151,7 @@ export const SnakeLadderGame: React.FC<SnakeLadderGameProps> = ({ level, onCompl
 
   return (
       <div className="flex w-full flex-col items-center justify-center gap-4 px-2 py-4 sm:px-4">
+         <p aria-live="polite" className="sr-only">{liveMessage}</p>
          {!isGameOver ? (
              <>
                  <div
@@ -154,6 +162,7 @@ export const SnakeLadderGame: React.FC<SnakeLadderGameProps> = ({ level, onCompl
                          key={`${level.board_width}x${level.board_height}-${level.seed ?? 'random'}-${level.snakes?.length ?? 0}-${level.ladders?.length ?? 0}`}
                          ref={phaserRef}
                          config={gameConfig}
+                         ariaLabel="Tablero de serpientes y escaleras. Use el botón Tirar Dado."
                          onGameReady={handleGameReady}
                      />
                  </div>
@@ -167,7 +176,7 @@ export const SnakeLadderGame: React.FC<SnakeLadderGameProps> = ({ level, onCompl
                  </Button>
              </>
          ) : (
-             <div className="flex flex-col items-center justify-center p-8 text-center text-white bg-slate-800 rounded-xl">
+             <div aria-live="polite" className="flex flex-col items-center justify-center p-8 text-center text-white bg-slate-800 rounded-xl">
                  <h2 className="text-3xl font-bold mb-4">Juego Terminado</h2>
                  <p className="text-xl">Ganador: {winner === 'player' ? '¡Tú!' : 'La Inteligencia Artificial'}</p>
              </div>

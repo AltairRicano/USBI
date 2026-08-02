@@ -117,14 +117,18 @@ export function CrosswordGame({ words, onFinish }: CrosswordGameProps) {
              key={words.map((word) => `${word.word}:${word.clue}`).join('|')}
              ref={phaserRef}
              config={gameConfig}
+             ariaLabel="Crucigrama interactivo. Use las flechas para moverse y escriba para completar."
            />
         </div>
       </CardContent>
       <div className="w-full md:w-96 p-6 border-t md:border-t-0 md:border-l border-[--color-border] flex flex-col gap-4 overflow-y-auto md:max-h-[720px]">
         <CardTitle className="text-xl">Crucigrama</CardTitle>
-        <div className="flex flex-col gap-2 bg-white dark:bg-[--color-card] p-4 rounded-xl border border-[--color-border]">
+        {/* aria-live mirrors the same score/completion text rendered below (C5):
+            a screen reader user gets it announced without navigating to it. */}
+        <div aria-live="polite" className="flex flex-col gap-2 bg-white dark:bg-[--color-card] p-4 rounded-xl border border-[--color-border]">
           <p className="text-sm text-[--color-text-muted]">Puntuación</p>
           <p className="font-bold text-2xl text-[--color-primary]">{state.score}</p>
+          {state.isFinished && <p className="sr-only">Crucigrama completado.</p>}
         </div>
         {state.isFinished && (
           <div className="mt-2 p-4 bg-green-100 text-green-800 rounded-xl font-bold text-center animate-pulse">

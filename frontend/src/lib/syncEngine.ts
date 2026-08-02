@@ -11,6 +11,7 @@ export interface LevelAttemptItem {
   attempt_date: string;   // ISO 8601 YYYY-MM-DD
   attempt_number: number;
   xp_awarded: number;     // Valor del cliente (el backend lo recalcula, no se confía)
+  score: number;          // Puntaje del juego (NO es XP); alimenta best_score. >= 0
   completed: boolean;
 }
 
@@ -96,6 +97,7 @@ export function buildCanonicalSigningPayload(request: SyncEventRequest): string 
       attempt.attempt_date,
       String(attempt.attempt_number),
       String(attempt.xp_awarded),
+      String(attempt.score),
       String(attempt.completed),
     ].join(','))
     .sort()

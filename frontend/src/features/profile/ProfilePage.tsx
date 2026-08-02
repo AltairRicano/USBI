@@ -7,7 +7,6 @@ import { apiClient } from '../../lib/apiClient';
 import { persistSecureSession } from '../../lib/secureSession';
 import { useAuthStore, type User } from '../../stores/useAuthStore';
 import { useSyncStore } from '../../stores/useSyncStore';
-import { useSettingsStore, type ColorBlindFilter } from '../../stores/useSettingsStore';
 import { useNavigate } from 'react-router-dom';
 import type { ProfileProgressResponse } from '../content/types';
 import { templateTypeLabel } from '../content/types';
@@ -15,7 +14,6 @@ import { templateTypeLabel } from '../content/types';
 export function ProfilePage() {
   const { user, token, refreshToken, updateUser } = useAuthStore();
   const deviceId = useSyncStore((state) => state.deviceId);
-  const { colorBlindFilter, setColorBlindFilter } = useSettingsStore();
   const navigate = useNavigate();
   const [ageUpMessage, setAgeUpMessage] = useState<string | null>(null);
   const [ageUpError, setAgeUpError] = useState<string | null>(null);
@@ -98,19 +96,14 @@ export function ProfilePage() {
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-                <div className="rounded-lg border border-[--color-border] p-5 shadow-sm bg-[--color-card]">
-                  <h3 className="text-lg font-bold mb-2">Filtro Visual</h3>
-                  <p className="text-sm text-[--color-muted] mb-4">Ajusta los colores de la aplicación para mejorar tu experiencia visual.</p>
-                  <select
-                    value={colorBlindFilter}
-                    onChange={(e) => setColorBlindFilter(e.target.value as ColorBlindFilter)}
-                    className="w-full text-sm border rounded px-3 py-2 bg-white text-black border-gray-300 focus:outline-none focus-visible:ring-2"
-                  >
-                    <option value="none">Normal</option>
-                    <option value="deuteranopia">Deuteranopía (Verde-Rojo)</option>
-                    <option value="protanopia">Protanopía (Rojo-Verde)</option>
-                    <option value="tritanopia">Tritanopía (Azul-Amarillo)</option>
-                  </select>
+                <div className="rounded-lg border border-[--color-border] p-5 shadow-sm bg-[--color-card] flex flex-col justify-between">
+                  <div>
+                    <h3 className="text-lg font-bold mb-2">Configuración</h3>
+                    <p className="text-sm text-[--color-muted] mb-4">Filtro de daltonización, tema, tamaño de texto, movimiento y sonido.</p>
+                  </div>
+                  <Button variant="outline" onClick={() => navigate('/settings')} className="w-full mt-4">
+                    Ir a Configuración
+                  </Button>
                 </div>
 
                 <div className="rounded-lg border border-[--color-border] p-5 shadow-sm bg-[--color-card] flex flex-col justify-between">

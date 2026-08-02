@@ -85,7 +85,7 @@ export async function syncLocalQueue(): Promise<void> {
   useSyncStore.getState().setPendingCount(countRows[0]?.count ?? 0);
 }
 
-export function buildAttemptPayload(levelID: string, completed: boolean): SyncPayload {
+export function buildAttemptPayload(levelID: string, completed: boolean, score = 0): SyncPayload {
   const today = new Date().toISOString().slice(0, 10);
   return {
     level_attempts: [
@@ -94,6 +94,7 @@ export function buildAttemptPayload(levelID: string, completed: boolean): SyncPa
         attempt_date: today,
         attempt_number: 1,
         xp_awarded: 0,
+        score: Math.max(0, Math.trunc(score)),
         completed,
       },
     ],

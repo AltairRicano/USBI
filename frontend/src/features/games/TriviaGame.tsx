@@ -81,7 +81,7 @@ export function TriviaGame({ questions, onFinish }: TriviaGameProps) {
           <CardTitle>Pregunta {state.currentQuestionIndex + 1} de {state.questions.length}</CardTitle>
           <span className="font-bold text-lg">{state.score} pts</span>
         </div>
-        <p className="text-gray-500 text-sm">Tiempo restante: {state.timeLeft}s</p>
+        <p className="text-[--color-muted] text-sm">Tiempo restante: {state.timeLeft}s</p>
       </CardHeader>
       <CardContent className="flex flex-col gap-6">
         <div className="text-xl font-medium text-center py-4">

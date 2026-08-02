@@ -75,6 +75,21 @@ WHERE user_id = $1 AND revoked_at IS NULL
 	return err
 }
 
+// PurgeExpiredRefreshTokens deletes tokens that are expired, or revoked more
+// than a week ago, so the table doesn't grow without bound (audit finding A8).
+// Returns the number of rows removed.
+func (q *Queries) PurgeExpiredRefreshTokens(ctx context.Context) (int64, error) {
+	res, err := q.db.ExecContext(ctx, `
+DELETE FROM refresh_tokens
+WHERE expires_at < NOW()
+   OR (revoked_at IS NOT NULL AND revoked_at < NOW() - INTERVAL '7 days')
+`)
+	if err != nil {
+		return 0, err
+	}
+	return res.RowsAffected()
+}
+
 func IsNoRows(err error) bool {
 	return err == sql.ErrNoRows
 }

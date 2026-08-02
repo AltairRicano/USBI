@@ -3,7 +3,7 @@ import { PuzzleGame } from '../../../games/PuzzleGame';
 export function PuzzlePreview({ value }: { value: any }) {
   if (!value.phrase) {
     return (
-      <div className="p-4 bg-gray-50 border rounded-md text-gray-500 text-center">
+      <div className="p-4 bg-gray-50 border rounded-md text-[--color-muted] text-center">
         Ingresa una frase para ver la vista previa.
       </div>
     );

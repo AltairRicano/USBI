@@ -62,7 +62,8 @@ export const FakeNewsGame: React.FC<FakeNewsGameProps> = ({ news, onComplete }) 
           )}
           <h3 className="text-2xl font-bold text-slate-800 mb-2">{currentItem.title}</h3>
           <p className="text-slate-600 mb-4">{currentItem.content}</p>
-          <div className="text-sm text-slate-400 italic">Desliza izquierda para VERDADERO, derecha para FALSO</div>
+          {/* text-slate-400 on white was 2.56:1 (audit C8); --color-muted is verified AA. */}
+          <div className="text-sm text-[--color-muted] italic">Desliza izquierda para VERDADERO, derecha para FALSO</div>
         </motion.div>
       </AnimatePresence>
 

@@ -7,7 +7,7 @@ import (
 	"log"
 	"time"
 
-	"github.com/altair/usbi-backend/internal/crypto"
+	"github.com/altair/usbi-backend/internal/privacy"
 	"github.com/altair/usbi-backend/internal/repository"
 	"github.com/google/uuid"
 )
@@ -22,9 +22,11 @@ type Config struct {
 }
 
 type Summary struct {
-	PendingTutorPurged int
-	InactiveSuspended  int64
-	SuspendedCancelled int
+	PendingTutorPurged  int
+	InactiveSuspended   int64
+	SuspendedCancelled  int
+	TutorTokensPurged   int64
+	RefreshTokensPurged int64
 }
 
 type Service struct {
@@ -86,9 +88,27 @@ func (s *Service) RunOnce(ctx context.Context, now time.Time) (Summary, error) {
 		summary.SuspendedCancelled++
 	}
 
+	// Housekeeping purges (A8 / A1): drop expired unverified tutor-consent tokens
+	// and expired/long-revoked refresh tokens so neither table grows unbounded.
+	tutorTokens, err := s.queries.PurgeExpiredTutorConsentTokens(ctx)
+	if err != nil {
+		return summary, fmt.Errorf("purging expired tutor consent tokens: %w", err)
+	}
+	summary.TutorTokensPurged = tutorTokens
+
+	refreshTokens, err := s.queries.PurgeExpiredRefreshTokens(ctx)
+	if err != nil {
+		return summary, fmt.Errorf("purging expired refresh tokens: %w", err)
+	}
+	summary.RefreshTokensPurged = refreshTokens
+
 	return summary, nil
 }
 
+// cancelUser runs the single canonical definitive-cancellation routine shared
+// with the ARCO approval path (A4), so an automatic cancellation and an
+// admin-approved one always perform exactly the same steps — including NULLing
+// the append-only ledgers, which this path previously skipped.
 func (s *Service) cancelUser(ctx context.Context, userID uuid.UUID, reason string) error {
 	tx, err := s.queries.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelSerializable})
 	if err != nil {
@@ -97,29 +117,13 @@ func (s *Service) cancelUser(ctx context.Context, userID uuid.UUID, reason strin
 	defer func() { _ = tx.Rollback() }()
 	qtx := s.queries.WithTx(tx)
 
-	pseudonymEmail := "deleted-" + userID.String() + "@pseudonymized.usbi.invalid"
-	emailHash := crypto.BlindIndexHMAC(pseudonymEmail, s.cfg.BlindIndexSecret)
-
-	if err := qtx.PseudonymizeTutorConsents(ctx, repository.PseudonymizeTutorConsentsParams{
-		UserID:        userID,
-		EncryptionKey: s.cfg.EncryptionKey,
+	if err := privacy.CancelUser(ctx, qtx, privacy.CancelParams{
+		UserID:           userID,
+		Reason:           reason,
+		EncryptionKey:    s.cfg.EncryptionKey,
+		BlindIndexSecret: s.cfg.BlindIndexSecret,
 	}); err != nil {
-		return fmt.Errorf("pseudonymizing tutor consents: %w", err)
-	}
-	if err := qtx.PseudonymizeUser(ctx, repository.PseudonymizeUserParams{
-		UserID:          userID,
-		PseudonymEmail:  pseudonymEmail,
-		EmailLookupHash: emailHash,
-		EncryptionKey:   s.cfg.EncryptionKey,
-		DeletionReason:  reason,
-	}); err != nil {
-		return fmt.Errorf("pseudonymizing user: %w", err)
-	}
-	if err := qtx.MarkUserDevicesForWipe(ctx, userID); err != nil {
-		return fmt.Errorf("marking devices for wipe: %w", err)
-	}
-	if err := qtx.RevokeRefreshTokensForUser(ctx, userID); err != nil {
-		return fmt.Errorf("revoking refresh tokens: %w", err)
+		return err
 	}
 	return tx.Commit()
 }
@@ -139,9 +143,11 @@ func StartScheduler(ctx context.Context, svc *Service, interval time.Duration, l
 				logger.Printf("[WARN] legal maintenance failed: %v", err)
 				return
 			}
-			if summary.PendingTutorPurged > 0 || summary.InactiveSuspended > 0 || summary.SuspendedCancelled > 0 {
-				logger.Printf("[INFO] legal maintenance completed: pending_tutor_purged=%d inactive_suspended=%d suspended_cancelled=%d",
-					summary.PendingTutorPurged, summary.InactiveSuspended, summary.SuspendedCancelled)
+			if summary.PendingTutorPurged > 0 || summary.InactiveSuspended > 0 || summary.SuspendedCancelled > 0 ||
+				summary.TutorTokensPurged > 0 || summary.RefreshTokensPurged > 0 {
+				logger.Printf("[INFO] legal maintenance completed: pending_tutor_purged=%d inactive_suspended=%d suspended_cancelled=%d tutor_tokens_purged=%d refresh_tokens_purged=%d",
+					summary.PendingTutorPurged, summary.InactiveSuspended, summary.SuspendedCancelled,
+					summary.TutorTokensPurged, summary.RefreshTokensPurged)
 			}
 		}
 

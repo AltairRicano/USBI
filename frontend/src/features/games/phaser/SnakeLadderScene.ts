@@ -1,5 +1,6 @@
 import * as Phaser from 'phaser';
 import { SnakeLadderEngine, SnakeLadderConfig, mapToGrid } from '@usbi/engine';
+import { useSettingsStore } from '../../../stores/useSettingsStore';
 
 interface BoardLayout {
   cols: number;
@@ -147,6 +148,9 @@ export class SnakeLadderScene extends Phaser.Scene {
 
   /** Short synthesized "tick" for each tumble, or a lower "thud" on the final settle. */
   private playDiceTick(isSettle: boolean) {
+    // Audit finding C7: this was the only way to play the dice sound, with no
+    // way to disable it — relevant in shared computer labs / with headphones.
+    if (useSettingsStore.getState().muteGameSounds) return;
     const ctx = this.ensureAudioContext();
     if (!ctx) return;
 

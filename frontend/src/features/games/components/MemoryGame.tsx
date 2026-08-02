@@ -46,7 +46,8 @@ export const MemoryGame: React.FC<MemoryGameProps> = ({ pairs, backColor = DEFAU
 
   return (
     <div className="flex flex-col items-center justify-center p-4">
-      <div className="grid grid-cols-4 gap-4 max-w-2xl w-full">
+      {/* grid-cols-3 en pantallas angostas (~350px), grid-cols-4 desde sm: (audit C10) */}
+      <div className="grid grid-cols-3 sm:grid-cols-4 gap-2 sm:gap-4 max-w-2xl w-full">
         {cards.map((card, index) => (
           <div
             key={card.id}

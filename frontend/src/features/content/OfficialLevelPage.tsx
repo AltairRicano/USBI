@@ -99,7 +99,7 @@ export function OfficialLevelPage() {
         queryClient.invalidateQueries({ queryKey: ['profile-progress'] }),
       ]);
     } catch {
-      await enqueueProgress(buildAttemptPayload(levelId, true));
+      await enqueueProgress(buildAttemptPayload(levelId, true, score));
       setSaveError('No se pudo guardar en línea. El intento quedó en cola local si estás usando la app de escritorio.');
     }
   }, [level?.is_published, levelId, queryClient]);

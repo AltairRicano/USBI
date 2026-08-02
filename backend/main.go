@@ -4,43 +4,68 @@ import (
 	"context"
 	"crypto/tls"
 	"database/sql"
-	"fmt"
+	"errors"
 	"log"
+	"log/slog"
 	"net/http"
-	"net/url"
 	"os"
+	"os/signal"
 	"strconv"
+	"strings"
+	"syscall"
 	"time"
 
 	"github.com/altair/usbi-backend/internal/auth"
+	"github.com/altair/usbi-backend/internal/config"
 	"github.com/altair/usbi-backend/internal/crypto"
 	"github.com/altair/usbi-backend/internal/dbmaint"
 	"github.com/altair/usbi-backend/internal/devices"
+	"github.com/altair/usbi-backend/internal/incidents"
 	"github.com/altair/usbi-backend/internal/levels"
+	"github.com/altair/usbi-backend/internal/mailer"
 	"github.com/altair/usbi-backend/internal/maintenance"
 	"github.com/altair/usbi-backend/internal/repository"
 	syncSvc "github.com/altair/usbi-backend/internal/sync"
 	"github.com/altair/usbi-backend/internal/transport"
 	"github.com/go-chi/chi/v5"
-	"github.com/joho/godotenv"
 	_ "github.com/lib/pq"
 )
 
 func main() {
-	loadEnvironment()
+	config.LoadEnvironment()
+
+	// ── Structured logging (B4) ───────────────────────────────────────────────
+	logger := newLogger()
+	slog.SetDefault(logger)
+	// The background schedulers take a *log.Logger; bridge it through slog so
+	// their output is structured too.
+	schedulerLogger := slog.NewLogLogger(logger.Handler(), slog.LevelInfo)
+
+	// Root context cancelled on SIGINT/SIGTERM so the server and the background
+	// schedulers all drain cleanly on `systemctl restart` (B4).
+	rootCtx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	defer stop()
 
 	// ── Required environment variables ────────────────────────────────────────
-	dbURL := databaseURL()
-	jwtSecret := requireEnv("JWT_SECRET")
-	encryptionKey := requireEnv("PGP_ENCRYPTION_KEY")
-	blindIndexSecret := requireEnv("BLIND_INDEX_SECRET")
-	hmacSecret := requireEnv("HMAC_SECRET")
+	dbURL := config.DatabaseURL()
+	jwtSecret := config.RequireSecret("JWT_SECRET")
+	encryptionKey := config.RequireSecret("PGP_ENCRYPTION_KEY")
+	blindIndexSecret := config.RequireSecret("BLIND_INDEX_SECRET")
+	hmacSecret := config.RequireSecret("HMAC_SECRET")
 
 	// Optional with defaults
-	port := getEnv("SERVER_PORT", "8088")
-	allowedOrigin := getEnv("CORS_ALLOWED_ORIGIN", "")
+	port := config.GetEnv("SERVER_PORT", "8088")
+	allowedOrigin := config.GetEnv("CORS_ALLOWED_ORIGIN", "")
 
-	accessExpiryStr := getEnv("JWT_ACCESS_EXPIRY_MINUTES", "15")
+	// ── Tutor double opt-in (A1): mailer + verification link ──────────────────
+	appMailer := buildMailer()
+	tutorVerifyURL := ""
+	if base := config.GetEnv("PUBLIC_API_BASE_URL", ""); base != "" {
+		tutorVerifyURL = strings.TrimRight(base, "/") + "/api/v1/auth/tutor-consent/verify"
+	}
+	tutorTokenTTL := config.GetDurationEnv("TUTOR_CONSENT_TOKEN_TTL", 24*time.Hour)
+
+	accessExpiryStr := config.GetEnv("JWT_ACCESS_EXPIRY_MINUTES", "15")
 	accessExpiryMinutes, err := strconv.Atoi(accessExpiryStr)
 	if err != nil {
 		log.Fatalf("[FATAL] Invalid JWT_ACCESS_EXPIRY_MINUTES: %v", err)
@@ -53,15 +78,13 @@ func main() {
 	}
 	defer db.Close()
 
-	dbMaxOpenConns := int(getInt32Env("DB_MAX_OPEN_CONNS", 10))
-	dbMaxIdleConns := int(getInt32Env("DB_MAX_IDLE_CONNS", 2))
-	if dbMaxIdleConns > dbMaxOpenConns {
-		log.Fatalf("[FATAL] DB_MAX_IDLE_CONNS (%d) cannot exceed DB_MAX_OPEN_CONNS (%d)", dbMaxIdleConns, dbMaxOpenConns)
-	}
+	dbMaxOpenConns := int(config.GetInt32Env("DB_MAX_OPEN_CONNS", 10))
+	dbMaxIdleConns := int(config.GetInt32Env("DB_MAX_IDLE_CONNS", 2))
+	config.CheckConnPoolBounds(int32(dbMaxIdleConns), int32(dbMaxOpenConns))
 	db.SetMaxOpenConns(dbMaxOpenConns)
 	db.SetMaxIdleConns(dbMaxIdleConns)
-	db.SetConnMaxLifetime(getDurationEnv("DB_CONN_MAX_LIFETIME", 30*time.Minute))
-	db.SetConnMaxIdleTime(getDurationEnv("DB_CONN_MAX_IDLE_TIME", 5*time.Minute))
+	db.SetConnMaxLifetime(config.GetDurationEnv("DB_CONN_MAX_LIFETIME", 30*time.Minute))
+	db.SetConnMaxIdleTime(config.GetDurationEnv("DB_CONN_MAX_IDLE_TIME", 5*time.Minute))
 
 	if err := db.Ping(); err != nil {
 		log.Fatalf("[FATAL] Database unreachable: %v", err)
@@ -81,59 +104,67 @@ func main() {
 		BlindIndexSecret:            []byte(blindIndexSecret),
 		HMACSecret:                  []byte(hmacSecret),
 		TokenConfig:                 tokenCfg,
-		MaxConcurrentPasswordHashes: int(getInt32Env("MAX_CONCURRENT_PASSWORD_HASHES", 2)),
+		MaxConcurrentPasswordHashes: int(config.GetInt32Env("MAX_CONCURRENT_PASSWORD_HASHES", 2)),
+		Mailer:                      appMailer,
+		TutorConsentVerifyURL:       tutorVerifyURL,
+		TutorConsentTokenTTL:        tutorTokenTTL,
 	})
 
 	syncService := syncSvc.NewService(queries, []byte(hmacSecret))
 	levelsSvc := levels.NewService(queries)
 	devicesSvc := devices.NewService(queries)
-	if getBoolEnv("LEGAL_MAINTENANCE_ENABLED", false) {
+	incidentsSvc := incidents.NewService(queries, []byte(hmacSecret))
+	if config.GetBoolEnv("LEGAL_MAINTENANCE_ENABLED", false) {
 		maintenanceSvc := maintenance.NewService(queries, maintenance.Config{
 			EncryptionKey:        encryptionKey,
 			BlindIndexSecret:     []byte(blindIndexSecret),
-			PendingTutorTTL:      getDurationEnv("PENDING_TUTOR_TTL", 48*time.Hour),
-			InactiveSuspendAfter: getDurationEnv("INACTIVE_SUSPEND_AFTER", 365*24*time.Hour),
-			SuspendedCancelAfter: getDurationEnv("SUSPENDED_CANCEL_AFTER", 30*24*time.Hour),
-			BatchSize:            getInt32Env("LEGAL_MAINTENANCE_BATCH_SIZE", 100),
+			PendingTutorTTL:      config.GetDurationEnv("PENDING_TUTOR_TTL", 48*time.Hour),
+			InactiveSuspendAfter: config.GetDurationEnv("INACTIVE_SUSPEND_AFTER", 365*24*time.Hour),
+			SuspendedCancelAfter: config.GetDurationEnv("SUSPENDED_CANCEL_AFTER", 30*24*time.Hour),
+			BatchSize:            config.GetInt32Env("LEGAL_MAINTENANCE_BATCH_SIZE", 100),
 		})
 		maintenance.StartScheduler(
-			context.Background(),
+			rootCtx,
 			maintenanceSvc,
-			getDurationEnv("LEGAL_MAINTENANCE_INTERVAL", 24*time.Hour),
-			log.Default(),
+			config.GetDurationEnv("LEGAL_MAINTENANCE_INTERVAL", 24*time.Hour),
+			schedulerLogger,
 		)
-		log.Println("[INFO] Legal maintenance scheduler enabled")
+		slog.Info("legal maintenance scheduler enabled")
 	}
 
 	// Structural DB concern, independent of legal/privacy retention above —
 	// keeps level_attempts/daily_streak supplied with future yearly
 	// partitions so inserts never hit the DEFAULT partition in practice.
-	if getBoolEnv("DB_PARTITION_MAINTENANCE_ENABLED", true) {
+	if config.GetBoolEnv("DB_PARTITION_MAINTENANCE_ENABLED", true) {
 		dbmaintSvc := dbmaint.NewService(db)
 		dbmaint.StartScheduler(
-			context.Background(),
+			rootCtx,
 			dbmaintSvc,
-			getDurationEnv("DB_PARTITION_MAINTENANCE_INTERVAL", 24*time.Hour),
-			log.Default(),
+			config.GetDurationEnv("DB_PARTITION_MAINTENANCE_INTERVAL", 24*time.Hour),
+			schedulerLogger,
 		)
-		log.Println("[INFO] DB partition maintenance scheduler enabled")
+		slog.Info("db partition maintenance scheduler enabled")
 	}
 
 	// ── Router wiring ─────────────────────────────────────────────────────────
 	r := chi.NewRouter()
 	transport.SetupRoutes(r, transport.RouterDependencies{
-		AuthHandler:    auth.NewHandler(authSvc),
-		SyncHandler:    syncSvc.NewHandler(syncService),
-		LevelsHandler:  levels.NewHandler(levelsSvc),
-		DevicesHandler: devices.NewHandler(devicesSvc),
-		ReadyCheck:     db.PingContext,
-		TokenCfg:       tokenCfg,
-		Queries:        queries,
-		AllowedOrigin:  allowedOrigin,
-		MaxBodyBytes:   int64(getInt32Env("API_MAX_BODY_BYTES", 6*1024*1024)),
+		AuthHandler:      auth.NewHandler(authSvc),
+		SyncHandler:      syncSvc.NewHandler(syncService),
+		LevelsHandler:    levels.NewHandler(levelsSvc),
+		DevicesHandler:   devices.NewHandler(devicesSvc),
+		IncidentsHandler: incidents.NewHandler(incidentsSvc),
+		ReadyCheck:       db.PingContext,
+		TokenCfg:         tokenCfg,
+		Queries:          queries,
+		AllowedOrigin:    allowedOrigin,
+		MaxBodyBytes:     int64(config.GetInt32Env("API_MAX_BODY_BYTES", 6*1024*1024)),
 		// Only trust proxy-forwarded IP headers once a reverse proxy in front
 		// of this service is confirmed to strip/set them itself (see DEPLOYMENT.md).
-		TrustProxyHeaders: getBoolEnv("TRUST_PROXY_HEADERS", false),
+		TrustProxyHeaders: config.GetBoolEnv("TRUST_PROXY_HEADERS", false),
+		// Per-request deadline so a slow query or a blocked advisory lock can't
+		// pin a goroutine and one of the few pool connections forever (B5).
+		RequestTimeout: config.GetDurationEnv("REQUEST_TIMEOUT", 20*time.Second),
 	})
 
 	// ── TLS 1.2+ (RF69 — TLS 1.0/1.1 explicitly disabled) ────────────────────
@@ -159,109 +190,77 @@ func main() {
 		IdleTimeout:  120 * time.Second,
 	}
 
-	certFile := getEnv("TLS_CERT_FILE", "")
-	keyFile := getEnv("TLS_KEY_FILE", "")
-	if certFile != "" && keyFile != "" {
-		fmt.Printf("[USBI Backend] Listening on :%s (HTTPS, TLS 1.2+)\n", port)
-		err = server.ListenAndServeTLS(certFile, keyFile)
-	} else {
-		fmt.Printf("[USBI Backend] Listening on :%s (HTTP — expects TLS termination by a reverse proxy)\n", port)
-		err = server.ListenAndServe()
-	}
-	if err != nil {
-		log.Fatalf("[FATAL] Server startup failed: %v", err)
-	}
-}
+	certFile := config.GetEnv("TLS_CERT_FILE", "")
+	keyFile := config.GetEnv("TLS_KEY_FILE", "")
 
-func loadEnvironment() {
-	if envFile := os.Getenv("USBI_BACKEND_ENV_FILE"); envFile != "" {
-		if err := godotenv.Load(envFile); err != nil {
-			log.Printf("[WARN] %s not found or unreadable — reading from system environment", envFile)
+	// Serve in the background so main can wait for a shutdown signal (B4).
+	serverErr := make(chan error, 1)
+	go func() {
+		if certFile != "" && keyFile != "" {
+			slog.Info("server listening", "addr", ":"+port, "tls", true)
+			serverErr <- server.ListenAndServeTLS(certFile, keyFile)
+		} else {
+			slog.Info("server listening", "addr", ":"+port, "tls", false,
+				"note", "expects TLS termination by a reverse proxy")
+			serverErr <- server.ListenAndServe()
 		}
-		return
-	}
+	}()
 
-	// Load .env in development. In production, vars normally come from systemd,
-	// Docker, or the hosting environment.
-	if err := godotenv.Load(); err != nil {
-		log.Println("[WARN] .env not found — reading from system environment")
+	select {
+	case err := <-serverErr:
+		if err != nil && !errors.Is(err, http.ErrServerClosed) {
+			log.Fatalf("[FATAL] Server startup failed: %v", err)
+		}
+	case <-rootCtx.Done():
+		// Stop intercepting signals so a second Ctrl-C force-kills if draining hangs.
+		stop()
+		slog.Info("shutdown signal received; draining connections")
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+		defer cancel()
+		if err := server.Shutdown(shutdownCtx); err != nil {
+			slog.Error("graceful shutdown failed", "error", err)
+		} else {
+			slog.Info("server stopped cleanly")
+		}
 	}
 }
 
-func databaseURL() string {
-	if val := os.Getenv("DATABASE_URL"); val != "" {
-		return val
+// newLogger builds the structured slog logger from LOG_LEVEL (debug|info|warn|
+// error, default info) and LOG_FORMAT (json|text, default json).
+func newLogger() *slog.Logger {
+	level := slog.LevelInfo
+	switch strings.ToLower(config.GetEnv("LOG_LEVEL", "info")) {
+	case "debug":
+		level = slog.LevelDebug
+	case "warn":
+		level = slog.LevelWarn
+	case "error":
+		level = slog.LevelError
 	}
-
-	dbUser := requireEnv("DB_USER")
-	dbPassword := requireEnv("DB_PASSWORD")
-	dbHost := requireEnv("DB_HOST")
-	dbPort := getEnv("DB_PORT", "5432")
-	dbName := requireEnv("DB_NAME")
-	sslMode := getEnv("DB_SSLMODE", "disable")
-
-	dsn := &url.URL{
-		Scheme: "postgres",
-		User:   url.UserPassword(dbUser, dbPassword),
-		Host:   fmt.Sprintf("%s:%s", dbHost, dbPort),
-		Path:   dbName,
+	opts := &slog.HandlerOptions{Level: level}
+	if strings.ToLower(config.GetEnv("LOG_FORMAT", "json")) == "text" {
+		return slog.New(slog.NewTextHandler(os.Stdout, opts))
 	}
-	query := dsn.Query()
-	query.Set("sslmode", sslMode)
-	dsn.RawQuery = query.Encode()
-	return dsn.String()
+	return slog.New(slog.NewJSONHandler(os.Stdout, opts))
 }
 
-// requireEnv panics at startup if the environment variable is missing or empty.
-// This surfaces misconfigurations immediately instead of silently failing later.
-func requireEnv(key string) string {
-	val := os.Getenv(key)
-	if val == "" {
-		log.Fatalf("[FATAL] Required environment variable %q is not set", key)
+// buildMailer constructs the transactional mailer from the environment. When
+// SMTP_HOST is unset it falls back to a dev LogMailer (which only logs the
+// verification link) and warns loudly — that fallback must never be used in
+// production, where tutor consent links must actually be delivered by email.
+func buildMailer() mailer.Mailer {
+	host := config.GetEnv("SMTP_HOST", "")
+	if host == "" {
+		log.Println("[WARN] SMTP_HOST not set — using dev LogMailer; tutor verification " +
+			"links will only appear in the logs. Configure SMTP before production.")
+		return mailer.NewLogMailer(log.Default())
 	}
-	return val
-}
-
-// getEnv returns the environment variable value or a fallback default.
-func getEnv(key, fallback string) string {
-	if val := os.Getenv(key); val != "" {
-		return val
-	}
-	return fallback
-}
-
-func getBoolEnv(key string, fallback bool) bool {
-	val := os.Getenv(key)
-	if val == "" {
-		return fallback
-	}
-	parsed, err := strconv.ParseBool(val)
-	if err != nil {
-		log.Fatalf("[FATAL] Invalid %s: %v", key, err)
-	}
-	return parsed
-}
-
-func getDurationEnv(key string, fallback time.Duration) time.Duration {
-	val := os.Getenv(key)
-	if val == "" {
-		return fallback
-	}
-	parsed, err := time.ParseDuration(val)
-	if err != nil {
-		log.Fatalf("[FATAL] Invalid %s: %v", key, err)
-	}
-	return parsed
-}
-
-func getInt32Env(key string, fallback int32) int32 {
-	val := os.Getenv(key)
-	if val == "" {
-		return fallback
-	}
-	parsed, err := strconv.ParseInt(val, 10, 32)
-	if err != nil || parsed <= 0 {
-		log.Fatalf("[FATAL] Invalid %s: %v", key, err)
-	}
-	return int32(parsed)
+	return mailer.NewSMTPMailer(mailer.Config{
+		Host:        host,
+		Port:        config.GetEnv("SMTP_PORT", "587"),
+		Username:    config.GetEnv("SMTP_USER", ""),
+		Password:    config.GetEnv("SMTP_PASSWORD", ""),
+		From:        config.GetEnv("SMTP_FROM", ""),
+		ImplicitTLS: config.GetBoolEnv("SMTP_IMPLICIT_TLS", false),
+	})
 }

@@ -14,6 +14,7 @@ import (
 
 	"github.com/altair/usbi-backend/internal/auth"
 	"github.com/altair/usbi-backend/internal/crypto"
+	"github.com/altair/usbi-backend/internal/dbmaint"
 	"github.com/altair/usbi-backend/internal/devices"
 	"github.com/altair/usbi-backend/internal/levels"
 	"github.com/altair/usbi-backend/internal/maintenance"
@@ -104,6 +105,20 @@ func main() {
 		log.Println("[INFO] Legal maintenance scheduler enabled")
 	}
 
+	// Structural DB concern, independent of legal/privacy retention above —
+	// keeps level_attempts/daily_streak supplied with future yearly
+	// partitions so inserts never hit the DEFAULT partition in practice.
+	if getBoolEnv("DB_PARTITION_MAINTENANCE_ENABLED", true) {
+		dbmaintSvc := dbmaint.NewService(db)
+		dbmaint.StartScheduler(
+			context.Background(),
+			dbmaintSvc,
+			getDurationEnv("DB_PARTITION_MAINTENANCE_INTERVAL", 24*time.Hour),
+			log.Default(),
+		)
+		log.Println("[INFO] DB partition maintenance scheduler enabled")
+	}
+
 	// ── Router wiring ─────────────────────────────────────────────────────────
 	r := chi.NewRouter()
 	transport.SetupRoutes(r, transport.RouterDependencies{
@@ -116,9 +131,16 @@ func main() {
 		Queries:        queries,
 		AllowedOrigin:  allowedOrigin,
 		MaxBodyBytes:   int64(getInt32Env("API_MAX_BODY_BYTES", 6*1024*1024)),
+		// Only trust proxy-forwarded IP headers once a reverse proxy in front
+		// of this service is confirmed to strip/set them itself (see DEPLOYMENT.md).
+		TrustProxyHeaders: getBoolEnv("TRUST_PROXY_HEADERS", false),
 	})
 
 	// ── TLS 1.2+ (RF69 — TLS 1.0/1.1 explicitly disabled) ────────────────────
+	// Only applies when TLS_CERT_FILE/TLS_KEY_FILE are set below and this
+	// process terminates TLS itself. When they're unset (the default, and the
+	// documented production setup in DEPLOYMENT.md), a reverse proxy (Nginx)
+	// is expected to terminate TLS and this server speaks plain HTTP to it.
 	tlsCfg := &tls.Config{
 		MinVersion: tls.VersionTLS12,
 		CurvePreferences: []tls.CurveID{
@@ -137,8 +159,16 @@ func main() {
 		IdleTimeout:  120 * time.Second,
 	}
 
-	fmt.Printf("[USBI Backend] Listening on :%s (HTTP)\n", port)
-	if err := server.ListenAndServe(); err != nil {
+	certFile := getEnv("TLS_CERT_FILE", "")
+	keyFile := getEnv("TLS_KEY_FILE", "")
+	if certFile != "" && keyFile != "" {
+		fmt.Printf("[USBI Backend] Listening on :%s (HTTPS, TLS 1.2+)\n", port)
+		err = server.ListenAndServeTLS(certFile, keyFile)
+	} else {
+		fmt.Printf("[USBI Backend] Listening on :%s (HTTP — expects TLS termination by a reverse proxy)\n", port)
+		err = server.ListenAndServe()
+	}
+	if err != nil {
 		log.Fatalf("[FATAL] Server startup failed: %v", err)
 	}
 }

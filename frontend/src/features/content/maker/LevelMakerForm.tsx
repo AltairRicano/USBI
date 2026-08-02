@@ -150,9 +150,9 @@ function LevelMakerFormInner({ initialData, sections, onSave, onCancel }: LevelM
 
       <div className="flex justify-between items-center mb-4">
         <h3 className="text-lg font-semibold">Contenido del Nivel</h3>
-        <button 
-          onClick={() => setShowPreview(!showPreview)} 
-          className="text-sm text-blue-600 underline"
+        <button
+          onClick={() => setShowPreview(!showPreview)}
+          className="text-sm text-[--color-primary] underline"
         >
           {showPreview ? 'Ocultar Previsualización' : 'Mostrar Previsualización'}
         </button>

@@ -9,6 +9,7 @@ import (
 
 	"github.com/altair/usbi-backend/internal/domain"
 	"github.com/altair/usbi-backend/internal/httpjson"
+	"github.com/altair/usbi-backend/internal/httputil"
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 )
@@ -128,10 +129,8 @@ func (h *Handler) TutorConsent(w http.ResponseWriter, r *http.Request) {
 	}
 
 	ip := net.ParseIP("0.0.0.0")
-	if host, _, err := net.SplitHostPort(r.RemoteAddr); err == nil {
-		if parsed := net.ParseIP(host); parsed != nil {
-			ip = parsed
-		}
+	if parsed := net.ParseIP(httputil.ClientIP(r)); parsed != nil {
+		ip = parsed
 	}
 
 	if err := h.svc.SubmitTutorConsent(r.Context(), req, ip, r.UserAgent()); err != nil {

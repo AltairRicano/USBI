@@ -2,11 +2,13 @@ import { useState, type FormEvent } from 'react';
 import { useNavigate, useLocation, Link } from 'react-router-dom';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
-import { useAuthStore, type User } from '../../stores/useAuthStore';
+import { useAuthStore } from '../../stores/useAuthStore';
 import { useSyncStore } from '../../stores/useSyncStore';
 import { apiClient } from '../../lib/apiClient';
 import axios from 'axios';
 import { persistSecureSession } from '../../lib/secureSession';
+import { AuthResponseSchema } from '../../lib/schema';
+import { ZodError } from 'zod';
 
 const EyeIcon = () => (
   <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -24,18 +26,8 @@ const EyeOffIcon = () => (
 );
 
 // ── Contratos del backend (Go dto.go) ────────────────────────────────────────
-
-/**
- * Respuesta del backend en POST /api/v1/auth/login.
- * Coincide exactamente con auth.LoginResponse en Go.
- * Corrección: el backend retorna "access_token", no "token".
- */
-interface LoginResponse {
-  access_token: string;
-  refresh_token: string;
-  token_type: string;
-  user: User;
-}
+// La forma de la respuesta de /auth/login se valida en runtime con
+// AuthResponseSchema (ver ../../lib/schema.ts), no solo se tipa.
 
 interface DeviceResponse {
   id: string;
@@ -76,10 +68,11 @@ export default function LoginPage() {
     setLoading(true);
 
     try {
-      const { data } = await apiClient.post<LoginResponse>('/auth/login', {
+      const response = await apiClient.post('/auth/login', {
         email,    // ← Corrección: campo renombrado a "email" (contrato del backend)
         password,
       });
+      const data = AuthResponseSchema.parse(response.data);
 
       login(data.user, data.access_token, data.refresh_token);
       const device = await apiClient.post<DeviceResponse>('/devices', {
@@ -102,6 +95,9 @@ export default function LoginPage() {
         } else {
           setError(problem.detail ?? 'Error al iniciar sesión. Intenta de nuevo.');
         }
+      } else if (err instanceof ZodError) {
+        console.error('[LoginPage] Respuesta de /auth/login con forma inesperada:', err.issues);
+        setError('El servidor respondió de forma inesperada. Intenta de nuevo más tarde.');
       } else {
         setError('No se pudo conectar con el servidor.');
       }

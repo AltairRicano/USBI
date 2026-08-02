@@ -32,6 +32,21 @@ var (
 
 const defaultMaxConcurrentPasswordHashes = 2
 
+// dummyPasswordHash is a precomputed Argon2id hash used to pad the "user not
+// found" login path with the same CPU cost as a real password verification.
+// Without this, an attacker can distinguish a registered email from an
+// unregistered one purely by response latency, even though both cases return
+// an identical error message.
+var dummyPasswordHash string
+
+func init() {
+	h, err := crypto.HashPassword("usbi-timing-safe-dummy-password-do-not-use")
+	if err != nil {
+		panic("auth: failed to precompute dummy password hash: " + err.Error())
+	}
+	dummyPasswordHash = h
+}
+
 // Config holds all secrets and settings needed by auth.Service.
 // Every field is required; zero values indicate a misconfiguration.
 type Config struct {
@@ -170,6 +185,15 @@ func (s *Service) Login(ctx context.Context, req LoginRequest) (LoginResponse, e
 		EncryptionKey:   s.cfg.EncryptionKey,
 	})
 	if err != nil {
+		// Pay the same Argon2id cost as a real login so response latency
+		// doesn't leak whether the email is registered. Result is discarded —
+		// this can never succeed since dummyPasswordHash never matches a real
+		// password. Skip padding only if the hashing service is saturated
+		// (rare, and preferable to blocking this error path).
+		if releaseHashSlot, slotErr := s.acquirePasswordHashSlot(); slotErr == nil {
+			_, _ = crypto.VerifyPassword(req.Password, dummyPasswordHash)
+			releaseHashSlot()
+		}
 		// Return generic error — don't leak whether email exists.
 		return LoginResponse{}, ErrUserNotFound
 	}

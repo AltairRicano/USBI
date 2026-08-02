@@ -42,6 +42,12 @@ export default defineConfig(async () => ({
   },
   preview: {
     allowedHosts: ["project.heimdall-lab.com"],
+    proxy: {
+      "/api": {
+        target: "http://192.168.1.210:8088",
+        changeOrigin: true
+      },
+    },
   },
   build: {
     chunkSizeWarningLimit: 2000, // Phaser es > 1MB, evitamos el warning

@@ -5,6 +5,7 @@ import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
 import { apiClient } from '../../lib/apiClient';
 import type { LevelDTO, LevelSummaryDTO, LevelsPageDTO, SectionDTO, SectionsResponse } from './types';
+import { templateTypeLabel } from './types';
 import { LevelMakerForm } from './maker/LevelMakerForm';
 
 interface SectionEditForm {
@@ -314,7 +315,7 @@ export function AdminContentPage() {
                               <div>
                                 <p className="font-medium text-sm">{level.title}</p>
                                 <p className="text-xs text-[--color-muted]">
-                                  {level.template_type} · dificultad {level.difficulty} · {level.is_published ? 'Publicado' : 'Borrador'}
+                                  {templateTypeLabel(level.template_type)} · dificultad {level.difficulty} · {level.is_published ? 'Publicado' : 'Borrador'}
                                 </p>
                               </div>
                               <div className="flex gap-2 items-center">

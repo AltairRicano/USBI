@@ -19,7 +19,11 @@ export class SnakeLadderScene extends Phaser.Scene {
   public isAnimating = false;
   private messageText!: Phaser.GameObjects.Text;
   private diceText!: Phaser.GameObjects.Text;
+  private diceGraphics!: Phaser.GameObjects.Graphics;
+  private diceRollTimer?: Phaser.Time.TimerEvent;
+  private audioCtx: AudioContext | null = null;
   private layout!: BoardLayout;
+  private readonly diceBoxSize = 46;
 
   constructor() {
     super('SnakeLadderScene');
@@ -31,6 +35,8 @@ export class SnakeLadderScene extends Phaser.Scene {
   }
 
   create() {
+    this.events.once(Phaser.Scenes.Events.SHUTDOWN, this.shutdown, this);
+
     this.layout = this.calculateLayout();
     this.drawHud();
     this.drawBoard();
@@ -42,9 +48,119 @@ export class SnakeLadderScene extends Phaser.Scene {
         const startPos = this.engine.state.playerPosition;
         this.engine.rollPlayer();
         const endPos = this.engine.state.playerPosition;
-        this.updateState('player', startPos, endPos);
+        this.playDiceRollAnimation(this.engine.state.lastRoll, () => {
+          this.updateState('player', startPos, endPos);
+        });
       }
     });
+
+    // Fired when the player answers a gating question incorrectly and the
+    // turn is forfeited straight to the AI, bypassing a player roll.
+    this.events.on('AI_PLAY', () => {
+      if (this.engine.state.state === 'ai_turn' && !this.isAnimating) {
+        this.playAITurnAnimated();
+      }
+    });
+  }
+
+  private playAITurnAnimated() {
+    const aiStartPos = this.engine.state.aiPosition;
+    this.engine.playAITurn();
+    const aiEndPos = this.engine.state.aiPosition;
+    this.playDiceRollAnimation(this.engine.state.lastRoll, () => {
+      this.updateState('ai', aiStartPos, aiEndPos);
+    });
+  }
+
+  /**
+   * ~1s "tumbling die" animation: cycles random faces with a tick sound,
+   * then settles on `finalValue` (already resolved by the engine) with a
+   * heavier "thud" before invoking `onComplete` to move the token.
+   */
+  private playDiceRollAnimation(finalValue: number, onComplete: () => void) {
+    const tickIntervalMs = 90;
+    const totalTicks = Math.round(1000 / tickIntervalMs);
+    this.diceGraphics.setVisible(true);
+
+    let tick = 0;
+    this.drawDieFace(1 + Math.floor(Math.random() * 6));
+    this.playDiceTick(false);
+
+    this.diceRollTimer?.remove();
+    this.diceRollTimer = this.time.addEvent({
+      delay: tickIntervalMs,
+      repeat: totalTicks - 1,
+      callback: () => {
+        tick++;
+        const isLast = tick >= totalTicks;
+        this.drawDieFace(isLast ? finalValue : 1 + Math.floor(Math.random() * 6));
+        this.playDiceTick(isLast);
+        if (isLast) {
+          this.time.delayedCall(150, onComplete);
+        }
+      },
+    });
+  }
+
+  private drawDieFace(value: number) {
+    const size = this.diceBoxSize;
+    const x = this.scale.width - size - 20;
+    const y = 14;
+    const g = this.diceGraphics;
+
+    g.clear();
+    g.fillStyle(0xffffff, 1);
+    g.lineStyle(2, 0x0f172a, 1);
+    g.fillRoundedRect(x, y, size, size, 8);
+    g.strokeRoundedRect(x, y, size, size, 8);
+
+    const pad = size * 0.24;
+    const mid = size / 2;
+    const pipRadius = Math.max(2.5, size * 0.07);
+    const facePips: Record<number, [number, number][]> = {
+      1: [[mid, mid]],
+      2: [[pad, pad], [size - pad, size - pad]],
+      3: [[pad, pad], [mid, mid], [size - pad, size - pad]],
+      4: [[pad, pad], [size - pad, pad], [pad, size - pad], [size - pad, size - pad]],
+      5: [[pad, pad], [size - pad, pad], [mid, mid], [pad, size - pad], [size - pad, size - pad]],
+      6: [[pad, pad], [size - pad, pad], [pad, mid], [size - pad, mid], [pad, size - pad], [size - pad, size - pad]],
+    };
+
+    g.fillStyle(0x0f172a, 1);
+    for (const [px, py] of facePips[value] ?? []) {
+      g.fillCircle(x + px, y + py, pipRadius);
+    }
+  }
+
+  /** Lazily creates (and resumes) a WebAudio context — no audio asset files needed. */
+  private ensureAudioContext(): AudioContext | null {
+    const AudioCtor = window.AudioContext ?? (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+    if (!AudioCtor) return null;
+    if (!this.audioCtx) {
+      this.audioCtx = new AudioCtor();
+    }
+    if (this.audioCtx.state === 'suspended') {
+      void this.audioCtx.resume();
+    }
+    return this.audioCtx;
+  }
+
+  /** Short synthesized "tick" for each tumble, or a lower "thud" on the final settle. */
+  private playDiceTick(isSettle: boolean) {
+    const ctx = this.ensureAudioContext();
+    if (!ctx) return;
+
+    const now = ctx.currentTime;
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type = isSettle ? 'triangle' : 'square';
+    osc.frequency.setValueAtTime(isSettle ? 180 : 320 + Math.random() * 120, now);
+    gain.gain.setValueAtTime(isSettle ? 0.12 : 0.06, now);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + (isSettle ? 0.18 : 0.06));
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.start(now);
+    osc.stop(now + (isSettle ? 0.2 : 0.07));
   }
 
   updateState(who: 'player' | 'ai', startPos: number, endPos: number) {
@@ -57,10 +173,7 @@ export class SnakeLadderScene extends Phaser.Scene {
       if (who === 'player' && this.engine.state.state === 'ai_turn') {
         this.time.delayedCall(500, () => {
           if (!this.isAnimating) {
-            const aiStartPos = this.engine.state.aiPosition;
-            this.engine.playAITurn();
-            const aiEndPos = this.engine.state.aiPosition;
-            this.updateState('ai', aiStartPos, aiEndPos);
+            this.playAITurnAnimated();
           }
         });
       } else if (this.engine.state.state === 'game_over') {
@@ -161,6 +274,7 @@ export class SnakeLadderScene extends Phaser.Scene {
       color: '#334155',
       fontSize: '18px',
     });
+    this.diceGraphics = this.add.graphics().setVisible(false);
   }
 
   private drawBoard() {
@@ -265,5 +379,14 @@ export class SnakeLadderScene extends Phaser.Scene {
       x: center.x + (isPlayer ? -spread : spread),
       y: center.y + spread * 0.35,
     };
+  }
+
+  private shutdown() {
+    this.diceRollTimer?.remove();
+    this.diceRollTimer = undefined;
+    if (this.audioCtx) {
+      void this.audioCtx.close();
+      this.audioCtx = null;
+    }
   }
 }

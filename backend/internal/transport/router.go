@@ -3,7 +3,6 @@ package transport
 import (
 	"context"
 	"encoding/json"
-	"net"
 	"net/http"
 	"strings"
 	"sync"
@@ -15,6 +14,7 @@ import (
 	"github.com/altair/usbi-backend/internal/crypto"
 	"github.com/altair/usbi-backend/internal/devices"
 	"github.com/altair/usbi-backend/internal/domain"
+	"github.com/altair/usbi-backend/internal/httputil"
 	"github.com/altair/usbi-backend/internal/levels"
 	"github.com/altair/usbi-backend/internal/repository"
 	syncHandler "github.com/altair/usbi-backend/internal/sync"
@@ -34,9 +34,15 @@ type RouterDependencies struct {
 	Queries        *repository.Queries
 	// MaxBodyBytes caps incoming API request bodies. Defaults to 6 MiB.
 	MaxBodyBytes int64
-	// AllowedOrigin is the CORS Allow-Origin value.
-	// Defaults to "https://usbi.edu.mx" if empty.
+	// AllowedOrigin is a comma-separated CORS allowlist (or "*" to opt into
+	// allowing any origin). Defaults to "https://usbi.edu.mx" if empty.
 	AllowedOrigin string
+	// TrustProxyHeaders enables chi's RealIP middleware, which rewrites
+	// r.RemoteAddr from True-Client-IP/X-Real-IP/X-Forwarded-For headers.
+	// MUST stay false unless a reverse proxy in front of this service is
+	// confirmed to strip/set those headers itself — otherwise any direct
+	// client can spoof its own IP for rate limiting and audit logging.
+	TrustProxyHeaders bool
 }
 
 const defaultMaxBodyBytes int64 = 6 * 1024 * 1024
@@ -61,7 +67,9 @@ func SetupRoutes(r chi.Router, deps RouterDependencies) {
 
 	// Global middleware stack
 	r.Use(middleware.RequestID)
-	r.Use(middleware.RealIP)
+	if deps.TrustProxyHeaders {
+		r.Use(middleware.RealIP)
+	}
 	r.Use(middleware.Logger)
 	r.Use(middleware.Recoverer)
 	r.Use(corsMiddleware(origin))
@@ -70,6 +78,7 @@ func SetupRoutes(r chi.Router, deps RouterDependencies) {
 	r.Route("/api/v1", func(r chi.Router) {
 		// ── Public routes ─────────────────────────────────────────────────────
 		r.Group(func(r chi.Router) {
+			r.Use(authRateLimitMiddleware)
 			if deps.AuthHandler != nil {
 				r.Post("/auth/register", deps.AuthHandler.Register)
 				r.Post("/auth/login", deps.AuthHandler.Login)
@@ -203,14 +212,40 @@ func notImplementedHandler(operation string) http.HandlerFunc {
 
 // corsMiddleware applies CORS headers. The origin is configurable to support
 // both production (https://usbi.edu.mx) and local LAN development.
-func corsMiddleware(defaultOrigin string) func(http.Handler) http.Handler {
+// corsMiddleware enforces an allowlist parsed from a comma-separated list of
+// origins (e.g. "https://usbi.edu.mx,http://localhost:5173"). A literal "*"
+// entry opts into allowing any origin (discouraged outside local development).
+// Unlike a naive reflect-any-origin implementation, a request whose Origin
+// does not match gets no Access-Control-Allow-Origin header at all, so
+// browsers block the cross-origin response as intended.
+func corsMiddleware(allowedOrigins string) func(http.Handler) http.Handler {
+	origins := make(map[string]struct{})
+	wildcard := false
+	for _, o := range strings.Split(allowedOrigins, ",") {
+		o = strings.TrimSpace(o)
+		if o == "" {
+			continue
+		}
+		if o == "*" {
+			wildcard = true
+			continue
+		}
+		origins[o] = struct{}{}
+	}
+
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			origin := r.Header.Get("Origin")
-			if origin == "" {
-				origin = defaultOrigin
+			w.Header().Add("Vary", "Origin")
+
+			reqOrigin := r.Header.Get("Origin")
+			if reqOrigin != "" {
+				if wildcard {
+					w.Header().Set("Access-Control-Allow-Origin", "*")
+				} else if _, ok := origins[reqOrigin]; ok {
+					w.Header().Set("Access-Control-Allow-Origin", reqOrigin)
+				}
 			}
-			w.Header().Set("Access-Control-Allow-Origin", origin)
+
 			w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PATCH, OPTIONS")
 			w.Header().Set("Access-Control-Allow-Headers", "Authorization, Content-Type, X-Request-ID")
 			w.Header().Set("Access-Control-Max-Age", "86400")
@@ -287,12 +322,27 @@ type visitor struct {
 	lastSeen time.Time
 }
 
+// General authenticated-route limiter: 10 rps / burst 20 per IP.
 var (
 	visitors = make(map[string]*visitor)
 	mu       sync.Mutex
 )
 
-// Background routine to cleanup old visitors
+// Stricter limiter for public auth routes (register/login/refresh/tutor-consent),
+// where the cost of a request (Argon2id hashing) makes even modest per-IP rates
+// attractive for credential stuffing / brute force. ~1 attempt every 2s with a
+// burst of 5 comfortably covers a legitimate user mistyping a password.
+const (
+	authRateRPS   rate.Limit = 0.5
+	authRateBurst            = 5
+)
+
+var (
+	authVisitors = make(map[string]*visitor)
+	authMu       sync.Mutex
+)
+
+// Background routine to cleanup old visitors from both limiter maps.
 func init() {
 	go func() {
 		for {
@@ -304,6 +354,14 @@ func init() {
 				}
 			}
 			mu.Unlock()
+
+			authMu.Lock()
+			for ip, v := range authVisitors {
+				if time.Since(v.lastSeen) > 3*time.Minute {
+					delete(authVisitors, ip)
+				}
+			}
+			authMu.Unlock()
 		}
 	}()
 }
@@ -323,20 +381,37 @@ func getVisitor(ip string) *rate.Limiter {
 	return v.limiter
 }
 
+func getAuthVisitor(ip string) *rate.Limiter {
+	authMu.Lock()
+	defer authMu.Unlock()
+
+	v, exists := authVisitors[ip]
+	if !exists {
+		limiter := rate.NewLimiter(authRateRPS, authRateBurst)
+		authVisitors[ip] = &visitor{limiter, time.Now()}
+		return limiter
+	}
+	v.lastSeen = time.Now()
+	return v.limiter
+}
+
 func rateLimitMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		ip, _, err := net.SplitHostPort(r.RemoteAddr)
-		if err != nil {
-			ip = r.RemoteAddr
+		limiter := getVisitor(httputil.ClientIP(r))
+		if !limiter.Allow() {
+			http.Error(w, `{"error":"too many requests"}`, http.StatusTooManyRequests)
+			return
 		}
-		
-		// If behind a proxy, use X-Forwarded-For
-		xff := r.Header.Get("X-Forwarded-For")
-		if xff != "" {
-			ip = strings.Split(xff, ",")[0]
-		}
-		
-		limiter := getVisitor(strings.TrimSpace(ip))
+		next.ServeHTTP(w, r)
+	})
+}
+
+// authRateLimitMiddleware applies a much stricter per-IP limit to the public
+// authentication routes, which are the most attractive target for credential
+// stuffing / brute force and previously had no rate limiting at all.
+func authRateLimitMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		limiter := getAuthVisitor(httputil.ClientIP(r))
 		if !limiter.Allow() {
 			http.Error(w, `{"error":"too many requests"}`, http.StatusTooManyRequests)
 			return

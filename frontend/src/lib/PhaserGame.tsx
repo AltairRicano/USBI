@@ -13,14 +13,19 @@ export interface PhaserGameProps {
 
 export const PhaserGame = forwardRef<IRefPhaserGame, PhaserGameProps>(({ config, onGameReady }, ref) => {
     const gameContainer = useRef<HTMLDivElement>(null);
+    // Tracks the live Phaser.Game instance itself (not DOM state) so React 18
+    // StrictMode's synchronous mount->cleanup->mount in dev never races against
+    // Phaser's own (not guaranteed synchronous) canvas teardown/creation.
+    const gameInstance = useRef<Phaser.Game | null>(null);
 
     useLayoutEffect(() => {
         if (!gameContainer.current) return;
 
         // Prevent multiple game instances during React StrictMode development
-        if (gameContainer.current.children.length > 0) return;
+        if (gameInstance.current) return;
 
         const game = new Phaser.Game({ ...config, parent: gameContainer.current });
+        gameInstance.current = game;
 
         if (typeof ref === 'function') {
             ref({ game, scene: null });
@@ -48,8 +53,9 @@ export const PhaserGame = forwardRef<IRefPhaserGame, PhaserGameProps>(({ config,
         });
 
         return () => {
-            if (game) {
-                game.destroy(true);
+            if (gameInstance.current) {
+                gameInstance.current.destroy(true);
+                gameInstance.current = null;
             }
             if (typeof ref === 'function') {
                 ref({ game: null, scene: null });

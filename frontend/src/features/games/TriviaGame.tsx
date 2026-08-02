@@ -13,12 +13,8 @@ interface TriviaGameProps {
 export function TriviaGame({ questions, onFinish }: TriviaGameProps) {
   const engineRef = useRef<TriviaEngine | null>(null);
   const [state, setState] = useState<TriviaState | null>(null);
-  const mounted = useRef(false);
 
   useEffect(() => {
-    if (mounted.current) return;
-    mounted.current = true;
-
     const setup = async () => {
       try {
         await invoke('set_game_status', { isPlaying: true });

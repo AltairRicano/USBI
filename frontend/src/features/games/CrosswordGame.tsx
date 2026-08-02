@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, useMemo } from 'react';
 import Phaser from 'phaser';
 import { invoke } from '@tauri-apps/api/core';
-import { CrosswordEngine, type CrosswordState } from '@usbi/engine';
+import { CrosswordEngine, type CrosswordState, type PlacedWord } from '@usbi/engine';
 import type { CrosswordWord } from '@usbi/schema';
 import { CrosswordScene } from './CrosswordScene';
 import { Card, CardTitle, CardContent } from '../../components/ui/Card';
@@ -78,6 +78,15 @@ export function CrosswordGame({ words, onFinish }: CrosswordGameProps) {
   const horizontals = useMemo(() => numberedWords.filter(pw => !pw.isVertical), [numberedWords]);
   const verticals = useMemo(() => numberedWords.filter(pw => pw.isVertical), [numberedWords]);
 
+  const isWordSolved = (pw: PlacedWord) => {
+    for (let i = 0; i < pw.word.length; i++) {
+      const cx = pw.isVertical ? pw.x : pw.x + i;
+      const cy = pw.isVertical ? pw.y + i : pw.y;
+      if (!state.lockedCells.has(`${cx},${cy}`)) return false;
+    }
+    return true;
+  };
+
   const gameConfig: Phaser.Types.Core.GameConfig = useMemo(() => ({
     type: Phaser.AUTO,
     width: 720,
@@ -132,9 +141,13 @@ export function CrosswordGame({ words, onFinish }: CrosswordGameProps) {
             <h4 className="font-bold text-lg border-b border-[--color-border] pb-2 mb-3">Horizontales</h4>
             <ul className="flex flex-col gap-2">
               {horizontals.map((pw, i) => (
-                <li key={`h-${i}`} className="text-sm text-[--color-text] flex items-start gap-2">
+                <li
+                  key={`h-${i}`}
+                  className={`text-sm flex items-start gap-2 ${isWordSolved(pw) ? 'text-green-600 line-through' : 'text-[--color-text]'}`}
+                >
                   <span className="font-bold shrink-0">{pw.num}.</span>
                   <span>{pw.clue}</span>
+                  {isWordSolved(pw) && <span aria-hidden="true">✓</span>}
                 </li>
               ))}
             </ul>
@@ -143,9 +156,13 @@ export function CrosswordGame({ words, onFinish }: CrosswordGameProps) {
             <h4 className="font-bold text-lg border-b border-[--color-border] pb-2 mb-3">Verticales</h4>
             <ul className="flex flex-col gap-2">
               {verticals.map((pw, i) => (
-                <li key={`v-${i}`} className="text-sm text-[--color-text] flex items-start gap-2">
+                <li
+                  key={`v-${i}`}
+                  className={`text-sm flex items-start gap-2 ${isWordSolved(pw) ? 'text-green-600 line-through' : 'text-[--color-text]'}`}
+                >
                   <span className="font-bold shrink-0">{pw.num}.</span>
                   <span>{pw.clue}</span>
+                  {isWordSolved(pw) && <span aria-hidden="true">✓</span>}
                 </li>
               ))}
             </ul>

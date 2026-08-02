@@ -20,6 +20,8 @@ export interface CrosswordState {
   userGrid: Map<string, string>;
   selectedCell: { x: number; y: number } | null;
   orientation: 'horizontal' | 'vertical';
+  /** Cell keys ("x,y") whose letter is correct — locked against further edits. */
+  lockedCells: Set<string>;
 }
 
 export class CrosswordEngine {
@@ -34,7 +36,8 @@ export class CrosswordEngine {
     isFinished: false,
     userGrid: new Map(),
     selectedCell: null,
-    orientation: 'horizontal'
+    orientation: 'horizontal',
+    lockedCells: new Set()
   };
   private listeners: Set<(state: CrosswordState) => void> = new Set();
   private initialWords: CrosswordWord[];
@@ -88,7 +91,8 @@ export class CrosswordEngine {
     if (this.state.isFinished || !this.state.selectedCell) return;
     const key = `${this.state.selectedCell.x},${this.state.selectedCell.y}`;
     if (!this.grid.has(key)) return;
-    
+    if (this.state.lockedCells.has(key)) return;
+
     const cleanChar = normalizeCrosswordAnswer(char).slice(0, 1);
     if (!cleanChar) {
       this.state.userGrid.delete(key);
@@ -142,21 +146,24 @@ export class CrosswordEngine {
   public validate() {
     let allCorrect = true;
     let correctCount = 0;
-    
+    const lockedCells = new Set<string>();
+
     for (const cell of this.grid.values()) {
       const key = `${cell.x},${cell.y}`;
       const userChar = this.state.userGrid.get(key);
       const expectedChar = cell.char.toUpperCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-      
+
       if (userChar === expectedChar) {
         correctCount++;
+        lockedCells.add(key);
       } else {
         allCorrect = false;
       }
     }
-    
+
     this.state.score = correctCount * 10;
-    
+    this.state.lockedCells = lockedCells;
+
     if (allCorrect && this.grid.size > 0) {
       this.state.isFinished = true;
     }
@@ -168,6 +175,7 @@ export class CrosswordEngine {
     this.state.isFinished = false;
     this.state.selectedCell = null;
     this.state.orientation = 'horizontal';
+    this.state.lockedCells = new Set();
     this.notify();
   }
 

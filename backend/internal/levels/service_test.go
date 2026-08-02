@@ -227,24 +227,45 @@ func TestValidateLevelInput_TemplateContracts(t *testing.T) {
 			wantErr:      true,
 		},
 		{
-			name:         "valid snakes ladders",
+			name:         "invalid snakes ladders needs questions",
 			templateType: "snakes_ladders",
 			content:      json.RawMessage(`{"board_width":6,"board_height":6,"start_position":1,"end_position":36,"snakes":[{"start":29,"end":13}],"ladders":[{"start":4,"end":16}]}`),
+			wantErr:      true,
 		},
 		{
-			name:         "valid snakes ladders with questions",
+			name:         "valid snakes ladders with eight questions",
 			templateType: "snakes_ladders",
 			content: json.RawMessage(`{"board_width":6,"board_height":6,"start_position":1,"end_position":36,"ai_config":{"difficulty":"MEDIUM"},"questions":[
 				{"question":"Capital de Veracruz","options":["Xalapa","Cordoba"],"correct_index":0},
 				{"question":"Color institucional principal","options":["Azul","Rojo"],"correct_index":0},
-				{"question":"USBI es una","options":["Biblioteca","Cafeteria"],"correct_index":0}
+				{"question":"USBI es una","options":["Biblioteca","Cafeteria"],"correct_index":0},
+				{"question":"2+2","options":["4","5"],"correct_index":0},
+				{"question":"El sol sale por el","options":["Este","Oeste"],"correct_index":0},
+				{"question":"Agua moja","options":["Verdadero","Falso"],"correct_index":0},
+				{"question":"La UV es una universidad","options":["Publica","Privada"],"correct_index":0},
+				{"question":"Un dado tiene","options":["6 caras","4 caras"],"correct_index":0}
 			]}`),
 		},
 		{
-			name:         "invalid snakes ladders needs three questions when present",
+			name:         "invalid snakes ladders needs at least eight questions",
 			templateType: "snakes_ladders",
 			content:      json.RawMessage(`{"board_width":6,"board_height":6,"start_position":1,"end_position":36,"questions":[{"question":"Una","options":["A","B"],"correct_index":0}]}`),
 			wantErr:      true,
+		},
+		{
+			name:         "invalid snakes ladders question needs exactly two options",
+			templateType: "snakes_ladders",
+			content: json.RawMessage(`{"board_width":6,"board_height":6,"start_position":1,"end_position":36,"questions":[
+				{"question":"Una","options":["A","B","C"],"correct_index":0},
+				{"question":"Dos","options":["A","B"],"correct_index":0},
+				{"question":"Tres","options":["A","B"],"correct_index":0},
+				{"question":"Cuatro","options":["A","B"],"correct_index":0},
+				{"question":"Cinco","options":["A","B"],"correct_index":0},
+				{"question":"Seis","options":["A","B"],"correct_index":0},
+				{"question":"Siete","options":["A","B"],"correct_index":0},
+				{"question":"Ocho","options":["A","B"],"correct_index":0}
+			]}`),
+			wantErr: true,
 		},
 		{
 			name:         "invalid snake must go down",

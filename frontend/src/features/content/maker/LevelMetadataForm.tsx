@@ -1,5 +1,6 @@
 import { Input } from '../../../components/ui/Input';
 import { SectionDTO } from '../types';
+import { TEMPLATE_TYPE_LABELS } from '../types';
 
 interface LevelMetadataFormProps {
   title: string;
@@ -55,13 +56,9 @@ export function LevelMetadataForm({
             required
             disabled={isEditing}
           >
-            <option value="trivia">Trivia</option>
-            <option value="memory">Memoria</option>
-            <option value="fake_news">Fake News</option>
-            <option value="word_search">Sopa de Letras</option>
-            <option value="puzzle">Rompecabezas</option>
-            <option value="crossword">Crucigrama</option>
-            <option value="snakes_ladders">Serpientes y Escaleras</option>
+            {Object.entries(TEMPLATE_TYPE_LABELS).map(([value, label]) => (
+              <option key={value} value={value}>{label}</option>
+            ))}
           </select>
         </label>
       </div>

@@ -4,6 +4,8 @@ import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
 import { apiClient } from '../../lib/apiClient';
 import axios from 'axios';
+import { ZodError } from 'zod';
+import { RegisterResponseSchema } from '../../lib/schema';
 
 const EyeIcon = () => (
   <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -27,11 +29,8 @@ interface ProblemDetails {
   detail: string;
 }
 
-interface RegisterResponse {
-  user_id: string;
-  status: 'active' | 'pending_tutor_consent';
-  message: string;
-}
+// La forma de la respuesta de /auth/register se valida en runtime con
+// RegisterResponseSchema (ver ../../lib/schema.ts), no solo se tipa.
 
 const privacyNoticeVersion = import.meta.env.VITE_PRIVACY_NOTICE_VERSION ?? 'v1.0';
 
@@ -70,13 +69,14 @@ export default function RegisterPage() {
     setLoading(true);
 
     try {
-      const { data } = await apiClient.post<RegisterResponse>('/auth/register', {
+      const response = await apiClient.post('/auth/register', {
         full_name: fullName,
         email,
         password,
         is_adult: isAdult,
         privacy_notice_version: privacyNoticeVersion,
       });
+      const data = RegisterResponseSchema.parse(response.data);
 
       if (data.status === 'pending_tutor_consent') {
         await apiClient.post('/auth/tutor-consent', {
@@ -92,6 +92,9 @@ export default function RegisterPage() {
       if (axios.isAxiosError(err) && err.response) {
         const problem = err.response.data as ProblemDetails;
         setError(problem.detail ?? 'Error al registrar la cuenta.');
+      } else if (err instanceof ZodError) {
+        console.error('[RegisterPage] Respuesta de /auth/register con forma inesperada:', err.issues);
+        setError('El servidor respondió de forma inesperada. Intenta de nuevo más tarde.');
       } else {
         setError('No se pudo conectar con el servidor.');
       }

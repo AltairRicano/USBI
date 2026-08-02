@@ -18,11 +18,14 @@ export const SnakesSchema = z.object({
     fail_probability: z.number().min(0).max(1).optional(),
     weights: z.array(z.number().min(0)).optional()
   }).optional(),
+  // Gates every dice roll behind a two-option question drawn from a queue
+  // (see SnakeLadderGame); a minimum bank of 8 keeps the queue from cycling
+  // through the same handful of questions too fast during a single match.
   questions: z.array(z.object({
     question: z.string().min(1),
-    options: z.array(z.string()).min(2).max(4),
+    options: z.array(z.string()).length(2),
     correct_index: z.number().int().min(0)
-  })).min(3).optional(),
+  })).min(8),
 }).superRefine((data, ctx) => {
   const total_cells = data.board_width * data.board_height;
   if (data.end_position > total_cells) {

@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { Button } from '../../components/ui/Button';
 import { apiClient } from '../../lib/apiClient';
 import type { LevelSummaryDTO, LevelsPageDTO, SectionDTO, SectionsResponse } from './types';
+import { templateTypeLabel } from './types';
 
 export function SectionLevelsPage() {
   const { sectionId } = useParams();
@@ -44,7 +45,7 @@ export function SectionLevelsPage() {
             <article key={level.id} className="rounded-lg bg-[--color-card] p-5 shadow-sm">
               <div className="mb-4 h-2 rounded" style={{ backgroundColor: level.color }} />
               <h2 className="text-xl font-semibold">{level.title}</h2>
-              <p className="mb-4 text-sm text-[--color-muted]">Dificultad {level.difficulty} · {level.template_type}</p>
+              <p className="mb-4 text-sm text-[--color-muted]">Dificultad {level.difficulty} · {templateTypeLabel(level.template_type)}</p>
               <Button size="sm">
                 <Link to={`/levels/${level.id}/play`}>Jugar</Link>
               </Button>

@@ -2,6 +2,7 @@ import { invoke } from '@tauri-apps/api/core';
 import { useSyncStore } from '../stores/useSyncStore';
 import { useAuthStore } from '../stores/useAuthStore';
 import { apiClient } from './apiClient';
+import { SyncEventResponseSchema } from './schema';
 
 // ── Tipos que espeja exactamente el contrato del Backend Go ──────────────────
 
@@ -52,8 +53,11 @@ async function fetchWithRetry(
   maxAttempts = 3
 ): Promise<SyncEventResponse> {
   try {
-    const response = await apiClient.post<SyncEventResponse>(url, data, { timeout: 30_000 });
-    return response.data;
+    const response = await apiClient.post(url, data, { timeout: 30_000 });
+    // Validated in runtime (not just typed): wipe_local_data drives a
+    // destructive local SQLite wipe, so an unexpected payload shape must
+    // never reach that branch unvalidated.
+    return SyncEventResponseSchema.parse(response.data);
   } catch (error) {
     if (isAxiosError(error) && error.response?.status === 401) {
       throw error;

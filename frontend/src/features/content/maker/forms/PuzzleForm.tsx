@@ -6,8 +6,8 @@ export function PuzzleForm({ value, onChange }: { value: any, onChange: (val: an
     <div className="space-y-4">
       <div>
         <label className="text-sm font-medium block mb-1 text-gray-700">Frase o mensaje secreto</label>
-        <textarea 
-          className="w-full p-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
+        <textarea
+          className="w-full p-2 border border-gray-300 rounded-md focus:ring-[--color-primary] focus:border-[--color-primary]"
           rows={3}
           value={value.phrase || ''} 
           onChange={(e: any) => onChange({...value, phrase: e.target.value})} 

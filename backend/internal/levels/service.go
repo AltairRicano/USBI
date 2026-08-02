@@ -1081,26 +1081,29 @@ func validateSnakesContent(content json.RawMessage) error {
 			}
 		}
 	}
-	if len(payload.Questions) > 0 {
-		if len(payload.Questions) < 3 {
+	// Snakes & ladders gates every dice roll behind a two-option question drawn
+	// from a queue (see frontend SnakeLadderGame); a minimum bank of 8 keeps
+	// that queue from cycling through the same handful of questions too fast.
+	if len(payload.Questions) < minSnakesQuestions {
+		return ErrValidation
+	}
+	for _, question := range payload.Questions {
+		if strings.TrimSpace(question.Question) == "" || len(question.Options) != 2 {
 			return ErrValidation
 		}
-		for _, question := range payload.Questions {
-			if strings.TrimSpace(question.Question) == "" || len(question.Options) < 2 || len(question.Options) > 4 {
+		if question.CorrectIndex < 0 || question.CorrectIndex >= len(question.Options) {
+			return ErrValidation
+		}
+		for _, option := range question.Options {
+			if strings.TrimSpace(option) == "" {
 				return ErrValidation
-			}
-			if question.CorrectIndex < 0 || question.CorrectIndex >= len(question.Options) {
-				return ErrValidation
-			}
-			for _, option := range question.Options {
-				if strings.TrimSpace(option) == "" {
-					return ErrValidation
-				}
 			}
 		}
 	}
 	return nil
 }
+
+const minSnakesQuestions = 8
 
 func decodeStrictContent(content json.RawMessage, dst any) error {
 	return httpjson.DecodeStrict(bytes.NewReader(content), dst)

@@ -10,6 +10,7 @@ import { useSyncStore } from '../../stores/useSyncStore';
 import { useSettingsStore, type ColorBlindFilter } from '../../stores/useSettingsStore';
 import { useNavigate } from 'react-router-dom';
 import type { ProfileProgressResponse } from '../content/types';
+import { templateTypeLabel } from '../content/types';
 
 export function ProfilePage() {
   const { user, token, refreshToken, updateUser } = useAuthStore();
@@ -130,7 +131,7 @@ export function ProfilePage() {
                     <div>
                       <p className="font-semibold">{level.title}</p>
                       <p className="text-sm text-[--color-muted]">
-                        {level.template_type} · XP {level.xp_total_for_level} · intentos {level.attempts_count}
+                        {templateTypeLabel(level.template_type)} · XP {level.xp_total_for_level} · intentos {level.attempts_count}
                       </p>
                     </div>
                     <Button variant="outline" size="sm">

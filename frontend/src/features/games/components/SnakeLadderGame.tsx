@@ -1,7 +1,8 @@
-import React, { useState, useEffect, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { Snakes } from '@usbi/schema';
 import { SnakeLadderEngine, SnakeLadderConfig } from '@usbi/engine';
 import { PhaserGame, IRefPhaserGame } from '../../../lib/PhaserGame';
+import { Button } from '../../../components/ui/Button';
 import { SnakeLadderScene } from '../phaser/SnakeLadderScene';
 import { invoke } from '@tauri-apps/api/core';
 import Phaser from 'phaser';
@@ -57,44 +58,60 @@ export const SnakeLadderGame: React.FC<SnakeLadderGameProps> = ({ level, onCompl
       }
   }), [engineConfig, engine]);
 
+  // phaserRef never changes identity (it's a ref), and Phaser assigns
+  // phaserRef.current.scene asynchronously after boot — an effect keyed on
+  // phaserRef alone runs once, immediately, before that assignment happens,
+  // and never re-runs to notice it later. onGameReady instead fires exactly
+  // when the Phaser game (and its registered scene) actually exist, so we
+  // stash that scene in state and let a normal effect react to it.
+  const [readyScene, setReadyScene] = useState<SnakeLadderScene | null>(null);
+  const handleGameReady = useCallback((game: Phaser.Game) => {
+      setReadyScene((game.scene.getScene('SnakeLadderScene') as SnakeLadderScene) ?? null);
+  }, []);
+
   useEffect(() => {
-     if (phaserRef.current?.scene) {
-        const scene = phaserRef.current.scene;
-        
-        const handleGameOver = (data: { winner: string }) => {
-            setIsGameOver(true);
-            setWinner(data.winner);
-            const score = data.winner === 'player' ? 100 : 0;
-            onComplete(score, 100);
-        };
-        
-        scene.events.on('GAME_OVER', handleGameOver);
-        
-        // Re-check roll button state periodically since scene drives it
-        const interval = setInterval(() => {
-            const snakeScene = scene as SnakeLadderScene;
-            setCanRoll(engine.state.state === 'player_turn' && !snakeScene.isAnimating);
-        }, 100);
+     if (!readyScene) return;
 
-        return () => {
-            scene.events.off('GAME_OVER', handleGameOver);
-            clearInterval(interval);
-        };
-     }
-  }, [phaserRef, engine, onComplete]);
+     const handleGameOver = (data: { winner: string }) => {
+         setIsGameOver(true);
+         setWinner(data.winner);
+         const score = data.winner === 'player' ? 100 : 0;
+         onComplete(score, 100);
+     };
 
-  const [currentQuestion, setCurrentQuestion] = useState<any>(null);
-  const [showQuestionModal, setShowQuestionModal] = useState(false);
+     readyScene.events.on('GAME_OVER', handleGameOver);
+
+     // Re-check roll button state periodically since scene drives it
+     const interval = setInterval(() => {
+         setCanRoll(engine.state.state === 'player_turn' && !readyScene.isAnimating);
+     }, 100);
+
+     return () => {
+         readyScene.events.off('GAME_OVER', handleGameOver);
+         clearInterval(interval);
+     };
+  }, [readyScene, engine, onComplete]);
+
+  // Cola de preguntas pendientes por responder: cada tiro de dado consume la
+  // de al frente. Una respuesta correcta la retira definitivamente de esta
+  // vuelta; una incorrecta la manda al final de la cola (se repite más
+  // adelante) y cede el turno a la IA. Cuando se vacía (todas respondidas
+  // bien al menos una vez) se rebaraja para que siempre haya pregunta.
+  const questions = useMemo(() => level.questions ?? [], [level]);
+  const [queue, setQueue] = useState<number[]>(() => shuffledIndices(questions.length));
+  const [currentQuestionIndex, setCurrentQuestionIndex] = useState<number | null>(null);
+  const showQuestionModal = currentQuestionIndex !== null;
+  const currentQuestion = currentQuestionIndex !== null ? questions[currentQuestionIndex] : null;
 
   const handleRollClick = () => {
-      const questions = (level as any).questions || [];
-      if (questions.length > 0) {
-          const q = questions[Math.floor(Math.random() * questions.length)];
-          setCurrentQuestion(q);
-          setShowQuestionModal(true);
-      } else {
+      if (questions.length === 0) {
           executeRoll();
+          return;
       }
+      const pending = queue.length > 0 ? queue : shuffledIndices(questions.length);
+      const [nextIndex, ...rest] = pending;
+      setQueue(rest);
+      setCurrentQuestionIndex(nextIndex);
   };
 
   const executeRoll = () => {
@@ -105,12 +122,15 @@ export const SnakeLadderGame: React.FC<SnakeLadderGameProps> = ({ level, onCompl
   };
 
   const handleAnswer = (index: number) => {
-      setShowQuestionModal(false);
+      if (currentQuestionIndex === null || !currentQuestion) return;
+      const answeredIndex = currentQuestionIndex;
+      setCurrentQuestionIndex(null);
       if (index === currentQuestion.correct_index) {
           executeRoll();
       } else {
+          setQueue((prev) => [...prev, answeredIndex]);
           setCanRoll(false);
-          engine.state.message = "¡Respuesta incorrecta! Pierdes el turno.";
+          engine.state.message = "¡Respuesta incorrecta! La pregunta vuelve a la cola. Pierdes el turno.";
           engine.state.state = 'ai_turn';
           if (phaserRef.current?.scene) {
               const snakeScene = phaserRef.current.scene as any;
@@ -134,15 +154,17 @@ export const SnakeLadderGame: React.FC<SnakeLadderGameProps> = ({ level, onCompl
                          key={`${level.board_width}x${level.board_height}-${level.seed ?? 'random'}-${level.snakes?.length ?? 0}-${level.ladders?.length ?? 0}`}
                          ref={phaserRef}
                          config={gameConfig}
+                         onGameReady={handleGameReady}
                      />
                  </div>
-                 <button 
+                 <Button
                      onClick={handleRollClick}
                      disabled={!canRoll}
-                     className="px-8 py-3 bg-blue-600 text-white rounded-full font-bold shadow-md disabled:bg-slate-400 active:scale-95 transition-transform"
+                     size="lg"
+                     className="rounded-full shadow-md"
                  >
                      Tirar Dado
-                 </button>
+                 </Button>
              </>
          ) : (
              <div className="flex flex-col items-center justify-center p-8 text-center text-white bg-slate-800 rounded-xl">
@@ -153,15 +175,15 @@ export const SnakeLadderGame: React.FC<SnakeLadderGameProps> = ({ level, onCompl
          
          {showQuestionModal && currentQuestion && (
              <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-                 <div className="bg-white p-6 rounded-xl shadow-xl max-w-md w-full">
-                     <h3 className="text-xl font-bold mb-4">Para tirar el dado, responde:</h3>
-                     <p className="text-lg mb-6">{currentQuestion.question}</p>
+                 <div className="bg-[--color-card] p-6 rounded-xl shadow-xl max-w-md w-full border border-[--color-border]">
+                     <h3 className="text-xl font-bold mb-4 text-[--color-primary]">Para tirar el dado, responde:</h3>
+                     <p className="text-lg mb-6 text-[--color-text-card]">{currentQuestion.question}</p>
                      <div className="flex flex-col gap-3">
                          {currentQuestion.options.map((opt: string, idx: number) => (
                              <button
                                  key={idx}
                                  onClick={() => handleAnswer(idx)}
-                                 className="px-4 py-3 text-left border rounded-lg hover:bg-blue-50 hover:border-blue-300 transition-colors"
+                                 className="px-4 py-3 text-left border border-[--color-border] rounded-lg text-[--color-text-card] hover:bg-[var(--color-primary)]/10 hover:border-[--color-primary] transition-colors"
                              >
                                  {opt}
                              </button>
@@ -173,3 +195,12 @@ export const SnakeLadderGame: React.FC<SnakeLadderGameProps> = ({ level, onCompl
       </div>
   );
 };
+
+function shuffledIndices(length: number): number[] {
+  const indices = Array.from({ length }, (_, i) => i);
+  for (let i = indices.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [indices[i], indices[j]] = [indices[j], indices[i]];
+  }
+  return indices;
+}

@@ -175,11 +175,23 @@ paths:
         '400':
           $ref: '#/components/responses/BadRequest'
         '401':
-          $ref: '#/components/responses/Unauthorized'
+          description: |
+            No autenticado o JWT expirado/invalidado, **o** firma HMAC
+            inválida sobre el payload de sync (posible intento de trampa).
+            Ambos casos comparten este código HTTP; se distinguen por el
+            campo `type` de `ProblemDetails`
+            (`.../errors/unauthorized` vs. `.../errors/invalid-signature`).
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
         '409':
           $ref: '#/components/responses/Conflict'
         '422':
-          description: HMAC inválido. Posible intento de trampa detectado.
+          description: |
+            Payload de sync inválido tras la verificación de HMAC (por
+            ejemplo: fecha de intento futura, `device_id` no registrado o
+            nivel no disponible).
           content:
             application/problem+json:
               schema:

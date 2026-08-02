@@ -49,6 +49,49 @@ export const SyncEventSchema = z.object({
   hmac_signature: z.string(),
 });
 
+// ── Respuestas del backend (validadas en runtime, no solo tipadas) ───────────
+// Coinciden con domain.User / auth.LoginResponse / auth.RegisterResponse /
+// domain.SyncEventResponse en Go. Se validan aquí porque controlan estado de
+// sesión y, en el caso de sync, un flag que dispara borrado de datos locales.
+
+export const UserRoleSchema = z.enum(["admin", "operator", "director", "player"]);
+export const UserStatusSchema = z.enum(["active", "suspended", "pending_tutor_consent", "deleted"]);
+
+export const UserSchema = z.object({
+  id: z.string().uuid(),
+  full_name: z.string(),
+  is_adult: z.boolean(),
+  role: UserRoleSchema,
+  status: UserStatusSchema,
+  created_at: z.string(),
+});
+
+/** POST /auth/login y POST /auth/refresh devuelven esta misma forma. */
+export const AuthResponseSchema = z.object({
+  access_token: z.string().min(1),
+  refresh_token: z.string(),
+  token_type: z.string(),
+  user: UserSchema,
+});
+
+export const RegisterResponseSchema = z.object({
+  user_id: z.string().uuid(),
+  status: z.enum(["active", "pending_tutor_consent"]),
+  message: z.string(),
+});
+
+/**
+ * POST /sync. wipe_local_data controla un borrado destructivo de SQLite
+ * local (ARCO/revocación) — nunca debe leerse desde una respuesta sin
+ * validar forma primero.
+ */
+export const SyncEventResponseSchema = z.object({
+  status: z.string(),
+  wipe_local_data: z.boolean(),
+  server_xp_total: z.number().int(),
+  badges_awarded: z.array(z.string().uuid()).optional(),
+});
+
 export const MultipleChoiceSchema = z.object({
   question: z.string().min(1),
   options: z.array(z.string()).min(2).max(4),

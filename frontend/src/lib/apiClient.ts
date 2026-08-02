@@ -2,6 +2,7 @@ import axios from 'axios';
 import { useAuthStore } from '../stores/useAuthStore';
 import { useSyncStore } from '../stores/useSyncStore';
 import { persistSecureSession, clearSecureSession } from './secureSession';
+import { AuthResponseSchema } from './schema';
 
 // ── Configuración base ────────────────────────────────────────────────────────
 const apiBaseURL = import.meta.env.VITE_API_BASE_URL ?? '/api/v1';
@@ -37,11 +38,10 @@ apiClient.interceptors.response.use(
         if (refreshToken) {
           try {
             (originalRequest as { _retry?: boolean })._retry = true;
-            const { data } = await axios.post<{
-              access_token: string;
-              refresh_token: string;
-              user: import('../stores/useAuthStore').User;
-            }>(`${apiBaseURL}/auth/refresh`, { refresh_token: refreshToken });
+            const refreshResponse = await axios.post(`${apiBaseURL}/auth/refresh`, { refresh_token: refreshToken });
+            // Validated in runtime (not just typed): a malformed refresh
+            // response must never be trusted to populate the auth session.
+            const data = AuthResponseSchema.parse(refreshResponse.data);
             useAuthStore.getState().login(data.user, data.access_token, data.refresh_token);
             await persistSecureSession({
               user: data.user,

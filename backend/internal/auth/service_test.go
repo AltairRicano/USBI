@@ -58,6 +58,28 @@ func TestPasswordHashSemaphoreHonorsConfiguredLimit(t *testing.T) {
 	}
 }
 
+func TestDummyPasswordHashIsValidAndUnmatchable(t *testing.T) {
+	if dummyPasswordHash == "" {
+		t.Fatal("dummyPasswordHash is empty, want a precomputed Argon2id hash")
+	}
+
+	ok, err := crypto.VerifyPassword("usbi-timing-safe-dummy-password-do-not-use", dummyPasswordHash)
+	if err != nil {
+		t.Fatalf("VerifyPassword() error = %v", err)
+	}
+	if !ok {
+		t.Fatal("VerifyPassword() = false for the exact dummy password, want true")
+	}
+
+	ok, err = crypto.VerifyPassword("some attacker-supplied password", dummyPasswordHash)
+	if err != nil {
+		t.Fatalf("VerifyPassword() error = %v", err)
+	}
+	if ok {
+		t.Fatal("VerifyPassword() = true for an unrelated password, want false")
+	}
+}
+
 func testConfig(maxConcurrentPasswordHashes int) Config {
 	return Config{
 		EncryptionKey:               "test-encryption-key",

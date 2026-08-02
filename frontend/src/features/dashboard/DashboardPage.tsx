@@ -6,6 +6,7 @@ import { Button } from '../../components/ui/Button';
 import { apiClient } from '../../lib/apiClient';
 import { useNavigate, NavigateFunction } from 'react-router-dom';
 import type { SectionDTO, SectionsResponse, LevelsPageDTO, TemplateType } from '../content/types';
+import { templateTypeLabel } from '../content/types';
 import { clearSecureSession } from '../../lib/secureSession';
 import { useSyncStore } from '../../stores/useSyncStore';
 
@@ -132,7 +133,7 @@ function LocalContentSection({ navigate }: { navigate: NavigateFunction }) {
                 </div>
                 <h3 className="font-bold truncate pr-6" title={lvl.metadata.title}>{lvl.metadata.title}</h3>
               </div>
-              <p className="text-xs text-[--color-muted]">Tipo: {lvl.metadata.template_type} | Dif: {lvl.metadata.difficulty}</p>
+              <p className="text-xs text-[--color-muted]">Tipo: {templateTypeLabel(lvl.metadata.template_type)} | Dif: {lvl.metadata.difficulty}</p>
               <Button size="sm" variant="primary" className="mt-2 w-full" onClick={() => navigate(`/local-play/${lvl.metadata.id}`)}>
                 Jugar local
               </Button>
@@ -277,7 +278,7 @@ function SectionAccordionItem({ section, navigate }: { section: SectionDTO; navi
                     <span className="text-sm font-semibold text-center w-32 break-words">{level.title}</span>
                     {/* Tooltip on hover */}
                     <div className="absolute -top-10 scale-0 group-hover:scale-100 transition-transform bg-black/80 backdrop-blur text-white text-xs rounded-lg py-1.5 px-3 pointer-events-none whitespace-nowrap z-20 shadow-xl">
-                      {level.template_type.replace('_', ' ')} • Dificultad {level.difficulty}
+                      {templateTypeLabel(level.template_type)} • Dificultad {level.difficulty}
                     </div>
                   </div>
                 );

@@ -18,4 +18,5 @@ database-data/
 
 # Binaries
 backend/server
+backend/main
 backend/cmd/server/server

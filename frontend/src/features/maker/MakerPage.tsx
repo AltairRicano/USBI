@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { Button } from '../../components/ui/Button';
 import { levelTemplateRegistry } from '../content/maker/registry';
 import type { TemplateType } from '../content/types';
+import { TEMPLATE_TYPE_LABELS } from '../content/types';
 
 interface MakerMetadata {
   id: string;
@@ -227,13 +228,9 @@ export const MakerPage = () => {
               onChange={handleTemplateChange}
               className="w-full rounded border border-[var(--color-border)] bg-[var(--color-background)] p-2 text-[var(--color-foreground)] focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]"
             >
-              <option value="trivia">Trivia</option>
-              <option value="crossword">Crucigrama</option>
-              <option value="word_search">Sopa de Letras</option>
-              <option value="puzzle">Rompecabezas</option>
-              <option value="fake_news">Detector de Fake News (Arco)</option>
-              <option value="memory">Memorama</option>
-              <option value="snakes_ladders">Serpientes y Escaleras</option>
+              {Object.entries(TEMPLATE_TYPE_LABELS).map(([value, label]) => (
+                <option key={value} value={value}>{label}</option>
+              ))}
             </select>
           </div>
         </fieldset>

@@ -1,4 +1,4 @@
-import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { Button } from '../../components/ui/Button';
 import type { LevelDTO } from './types';
@@ -11,6 +11,7 @@ import {
   normalizeSnakesContent,
   normalizeTriviaContent,
   normalizeWordSearchContent,
+  templateTypeLabel,
 } from './types';
 
 const TriviaGame = lazy(() => import('../games/TriviaGame').then((mod) => ({ default: mod.TriviaGame })));
@@ -61,6 +62,45 @@ export function LocalLevelPage() {
     setResult({ score });
   }, [level]);
 
+  // Memoized on level: a fresh array/object reference on every render would
+  // make the game components below think their content prop changed, tearing
+  // down and losing their in-progress/finished engine state.
+  // These must run before any early return below — Hooks can't be called
+  // conditionally, and a component that calls fewer hooks on one render than
+  // another (e.g. skipping them while `level` is still loading) crashes React.
+  const triviaQuestions = useMemo(
+    () => (level && level.template_type === 'trivia' ? normalizeTriviaContent(level.content) : []),
+    [level],
+  );
+  const memoryPairs = useMemo(
+    () => (level && level.template_type === 'memory' ? normalizeMemoryContent(level.content) : []),
+    [level],
+  );
+  const memoryBackColor = useMemo(
+    () => (level && level.template_type === 'memory' ? normalizeMemoryBackColorContent(level.content) : undefined),
+    [level],
+  );
+  const fakeNews = useMemo(
+    () => (level && level.template_type === 'fake_news' ? normalizeFakeNewsContent(level.content) : []),
+    [level],
+  );
+  const wordSearch = useMemo(
+    () => (level && level.template_type === 'word_search' ? normalizeWordSearchContent(level.content) : null),
+    [level],
+  );
+  const puzzle = useMemo(
+    () => (level && level.template_type === 'puzzle' ? normalizePuzzleContent(level.content) : null),
+    [level],
+  );
+  const crosswordWords = useMemo(
+    () => (level && level.template_type === 'crossword' ? normalizeCrosswordContent(level.content) : []),
+    [level],
+  );
+  const snakes = useMemo(
+    () => (level && level.template_type === 'snakes_ladders' ? normalizeSnakesContent(level.content) : null),
+    [level],
+  );
+
   useEffect(() => {
     const isPlaying = Boolean(level && hasPlayableContent(level) && !result);
     void setTauriGameStatus(isPlaying);
@@ -86,22 +126,13 @@ export function LocalLevelPage() {
     return <main className="min-h-screen p-6">Cargando nivel...</main>;
   }
 
-  const triviaQuestions = level.template_type === 'trivia' ? normalizeTriviaContent(level.content) : [];
-  const memoryPairs = level.template_type === 'memory' ? normalizeMemoryContent(level.content) : [];
-  const memoryBackColor = level.template_type === 'memory' ? normalizeMemoryBackColorContent(level.content) : undefined;
-  const fakeNews = level.template_type === 'fake_news' ? normalizeFakeNewsContent(level.content) : [];
-  const wordSearch = level.template_type === 'word_search' ? normalizeWordSearchContent(level.content) : null;
-  const puzzle = level.template_type === 'puzzle' ? normalizePuzzleContent(level.content) : null;
-  const crosswordWords = level.template_type === 'crossword' ? normalizeCrosswordContent(level.content) : [];
-  const snakes = level.template_type === 'snakes_ladders' ? normalizeSnakesContent(level.content) : null;
-
   return (
     <main className="min-h-screen p-6" style={{ backgroundColor: 'var(--color-surface)' }}>
       <div className="mx-auto max-w-4xl space-y-5">
         <header className="flex flex-wrap items-center justify-between gap-4">
           <div>
             <h1 className="text-3xl font-bold">{level.title}</h1>
-            <p className="text-sm text-[--color-muted]">Dificultad {level.difficulty} · {level.template_type}</p>
+            <p className="text-sm text-[--color-muted]">Dificultad {level.difficulty} · {templateTypeLabel(level.template_type)}</p>
           </div>
           <Button variant="outline" size="sm">
             <Link to="/dashboard">Dashboard</Link>

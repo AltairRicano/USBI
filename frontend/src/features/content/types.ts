@@ -10,6 +10,22 @@ export type TemplateType =
   | 'memory'
   | 'snakes_ladders';
 
+// Nombres en español para mostrar al usuario — el backend/BD siguen usando el
+// identificador snake_case de TemplateType, pero nunca debe verse tal cual.
+export const TEMPLATE_TYPE_LABELS: Record<TemplateType, string> = {
+  trivia: 'Trivia',
+  memory: 'Memorama',
+  fake_news: 'Noticias falsas',
+  word_search: 'Sopa de letras',
+  puzzle: 'Rompecabezas',
+  crossword: 'Crucigrama',
+  snakes_ladders: 'Serpientes y escaleras',
+};
+
+export function templateTypeLabel(type: string): string {
+  return TEMPLATE_TYPE_LABELS[type as TemplateType] ?? type;
+}
+
 export interface SectionDTO {
   id: string;
   title: string;

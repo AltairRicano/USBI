@@ -162,18 +162,20 @@ export class CrosswordScene extends Phaser.Scene {
   private drawState(state: CrosswordState) {
     this.highlightGraphics.clear();
 
-    // Reset colors
-    this.cellRects.forEach((rect) => {
-      rect.setFillStyle(0xffffff);
+    // Reset colors, painting already-correct (locked) cells green
+    this.cellRects.forEach((rect, key) => {
+      rect.setFillStyle(state.lockedCells.has(key) ? 0xa5d6a7 : 0xffffff);
     });
 
-    // Draw selection
+    // Draw selection (a locked cell keeps its green fill instead)
     if (state.selectedCell) {
       const {x, y} = state.selectedCell;
       const key = `${x},${y}`;
-      const rect = this.cellRects.get(key);
-      if (rect) {
-        rect.setFillStyle(0xffea00); // Yellow highlight
+      if (!state.lockedCells.has(key)) {
+        const rect = this.cellRects.get(key);
+        if (rect) {
+          rect.setFillStyle(0xffea00); // Yellow highlight
+        }
       }
     }
 

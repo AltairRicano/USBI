@@ -46,13 +46,13 @@ export function SnakeLadderBoardPreview({ value }: { value: SnakeLadderContent }
                 key={cell}
                 className={[
                   'relative min-h-9 border border-slate-300 p-1 text-xs font-bold text-slate-900 sm:min-h-12',
-                  isStart ? 'bg-blue-100' : '',
+                  isStart ? 'bg-[var(--color-primary)]/10' : '',
                   isEnd ? 'bg-green-100' : '',
                   !isStart && !isEnd ? 'bg-white' : '',
                 ].join(' ')}
               >
                 <span>{cell}</span>
-                {isStart && <span className="absolute bottom-1 left-1 text-[10px] text-blue-700">Inicio</span>}
+                {isStart && <span className="absolute bottom-1 left-1 text-[10px] text-[--color-primary]">Inicio</span>}
                 {isEnd && <span className="absolute bottom-1 left-1 text-[10px] text-green-700">Meta</span>}
                 {hasSnake && <span className="absolute right-1 top-1 h-2 w-2 rounded-full bg-red-600" />}
                 {hasLadder && <span className="absolute right-1 top-1 h-2 w-2 rounded-full bg-green-600" />}

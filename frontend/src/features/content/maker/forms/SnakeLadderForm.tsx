@@ -11,6 +11,10 @@ import {
 
 type SnakeQuestion = NonNullable<SnakeLadderContent['questions']>[number];
 
+// Cada pregunta gatea un turno de dado con exactamente dos opciones, y el
+// backend exige un mínimo de 8 para que la cola no se repita muy rápido.
+const MIN_QUESTIONS = 8;
+
 export function SnakeLadderForm({
   value,
   onChange,
@@ -29,7 +33,7 @@ export function SnakeLadderForm({
 
   const addQuestion = () => onChange({ ...value, questions: [...questions, createEmptyQuestion()] });
   const removeQuestion = (idx: number) => {
-    if (questions.length <= 3) return;
+    if (questions.length <= MIN_QUESTIONS) return;
     onChange({ ...value, questions: questions.filter((_, i) => i !== idx) });
   };
   const updateQuestion = (idx: number, updated: SnakeQuestion) => {
@@ -123,23 +127,28 @@ export function SnakeLadderForm({
 
       <div className="mt-8 border-t pt-6">
         <div className="flex justify-between items-center mb-4">
-          <h4 className="text-xl font-bold">Preguntas de Cultura General</h4>
+          <div>
+            <h4 className="text-xl font-bold">Preguntas de Cultura General</h4>
+            <p className="text-sm text-gray-500">
+              Cada pregunta debe tener exactamente dos opciones. Mínimo {MIN_QUESTIONS} preguntas ({questions.length}/{MIN_QUESTIONS}).
+            </p>
+          </div>
           <Button onClick={addQuestion}>+ Agregar Pregunta</Button>
         </div>
         <div className="space-y-6">
           {questions.map((q, idx) => (
             <div key={idx} className="p-4 border rounded-lg bg-gray-50 relative">
-              <button 
-                onClick={() => removeQuestion(idx)} 
-                disabled={questions.length <= 3}
+              <button
+                onClick={() => removeQuestion(idx)}
+                disabled={questions.length <= MIN_QUESTIONS}
                 className="absolute top-2 right-2 text-red-500 hover:bg-red-50 p-2 rounded"
                 title="Eliminar pregunta"
               >X</button>
               <div className="mb-4 pr-8">
-                <Input 
-                  label={`Pregunta ${idx + 1}`} 
-                  value={q.question} 
-                  onChange={(e: ChangeEvent<HTMLInputElement>) => updateQuestion(idx, { ...q, question: e.target.value })} 
+                <Input
+                  label={`Pregunta ${idx + 1}`}
+                  value={q.question}
+                  onChange={(e: ChangeEvent<HTMLInputElement>) => updateQuestion(idx, { ...q, question: e.target.value })}
                   className="w-full"
                 />
               </div>
@@ -147,35 +156,23 @@ export function SnakeLadderForm({
                 <p className="font-semibold text-sm">Opciones (marca la correcta):</p>
                 {q.options.map((opt: string, optIdx: number) => (
                   <div key={optIdx} className="flex gap-2 items-center">
-                    <input 
-                      type="radio" 
-                      name={`correct-${idx}`} 
-                      checked={q.correct_index === optIdx} 
-                      onChange={() => updateQuestion(idx, { ...q, correct_index: optIdx })} 
+                    <input
+                      type="radio"
+                      name={`correct-${idx}`}
+                      checked={q.correct_index === optIdx}
+                      onChange={() => updateQuestion(idx, { ...q, correct_index: optIdx })}
                     />
-                    <Input 
+                    <Input
                       label=""
-                      value={opt} 
+                      value={opt}
                       onChange={(e: ChangeEvent<HTMLInputElement>) => {
                         const newOpts = [...q.options];
                         newOpts[optIdx] = e.target.value;
                         updateQuestion(idx, { ...q, options: newOpts });
-                      }} 
+                      }}
                     />
-                    {q.options.length > 2 && (
-                      <Button size="sm" variant="outline" onClick={() => {
-                        const newOpts = q.options.filter((_, i) => i !== optIdx);
-                        const newCorrect = q.correct_index === optIdx ? 0 : (q.correct_index > optIdx ? q.correct_index - 1 : q.correct_index);
-                        updateQuestion(idx, { ...q, options: newOpts, correct_index: newCorrect });
-                      }}>X</Button>
-                    )}
                   </div>
                 ))}
-                {q.options.length < 4 && (
-                  <Button size="sm" variant="outline" className="mt-2" onClick={() => updateQuestion(idx, { ...q, options: [...q.options, ''] })}>
-                    + Agregar opción
-                  </Button>
-                )}
               </div>
             </div>
           ))}

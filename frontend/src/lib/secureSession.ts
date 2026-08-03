@@ -1,6 +1,7 @@
 import type { User } from '../stores/useAuthStore';
 import { useAuthStore } from '../stores/useAuthStore';
 import { useSyncStore } from '../stores/useSyncStore';
+import { StoredSessionSchema } from './schema';
 
 interface StoredSession {
   user: User;
@@ -25,8 +26,22 @@ export async function persistSecureSession(session: StoredSession): Promise<void
 export async function restoreSecureSession(): Promise<void> {
   const store = await loadSessionStore();
   if (!store) return;
-  const session = await store.get<StoredSession>('session');
-  if (!session?.user || !session.token) return;
+  const raw = await store.get('session');
+  if (!raw) return;
+
+  // Zero Trust: usbi-session.json vive en el filesystem del usuario, fuera
+  // del control del backend. Validar la forma real antes de confiar en ella
+  // evita que datos corruptos o manipulados (p. ej. un role inyectado)
+  // pueblen el estado de autenticación de la app. Ante cualquier forma
+  // inesperada, se descarta la sesión completa en vez de usarla a medias.
+  const parsed = StoredSessionSchema.safeParse(raw);
+  if (!parsed.success) {
+    console.error('[secureSession] usbi-session.json con forma inesperada, descartando sesión:', parsed.error.issues);
+    await clearSecureSession();
+    return;
+  }
+
+  const session: StoredSession = parsed.data;
   useAuthStore.getState().login(session.user, session.token, session.refreshToken);
   useSyncStore.getState().setDeviceId(session.deviceId);
 }

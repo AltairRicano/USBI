@@ -64,8 +64,13 @@ func ClaimsFromContext(ctx context.Context) *domain.JWTClaims {
 	return nil
 }
 
-// SetupRoutes registers all HTTP routes with their middleware chain.
-func SetupRoutes(r chi.Router, deps RouterDependencies) {
+// SetupRoutes registers all HTTP routes with their middleware chain. It
+// returns a cleanup func that stops the rate limiters' background cleanup
+// goroutine — callers should defer it (or invoke it during graceful
+// shutdown); it is not required for the server to function correctly.
+func SetupRoutes(r chi.Router, deps RouterDependencies) func() {
+	rl := newRateLimiters()
+
 	origin := deps.AllowedOrigin
 	if origin == "" {
 		origin = "https://usbi.edu.mx"
@@ -92,7 +97,7 @@ func SetupRoutes(r chi.Router, deps RouterDependencies) {
 	r.Route("/api/v1", func(r chi.Router) {
 		// ── Public routes ─────────────────────────────────────────────────────
 		r.Group(func(r chi.Router) {
-			r.Use(authRateLimitMiddleware)
+			r.Use(rl.authMiddleware)
 			if deps.AuthHandler != nil {
 				r.Post("/auth/register", deps.AuthHandler.Register)
 				r.Post("/auth/login", deps.AuthHandler.Login)
@@ -111,7 +116,7 @@ func SetupRoutes(r chi.Router, deps RouterDependencies) {
 		// ── Authenticated routes ──────────────────────────────────────────────
 		r.Group(func(r chi.Router) {
 			r.Use(jwtAuthMiddleware(deps.TokenCfg, deps.Queries))
-			r.Use(rateLimitMiddleware)
+			r.Use(rl.generalMiddleware)
 
 			if deps.AuthHandler != nil {
 				r.Post("/auth/logout", deps.AuthHandler.Logout)
@@ -180,6 +185,8 @@ func SetupRoutes(r chi.Router, deps RouterDependencies) {
 	r.Get("/health", healthHandler)
 	r.Get("/health/live", healthHandler)
 	r.Get("/health/ready", readyHandler(deps.ReadyCheck))
+
+	return rl.Close
 }
 
 func maxBodyBytesMiddleware(maxBytes int64) func(http.Handler) http.Handler {
@@ -353,12 +360,6 @@ type visitor struct {
 	lastSeen time.Time
 }
 
-// General authenticated-route limiter: 10 rps / burst 20 per IP.
-var (
-	visitors = make(map[string]*visitor)
-	mu       sync.Mutex
-)
-
 // Stricter limiter for public auth routes (register/login/refresh/tutor-consent),
 // where the cost of a request (Argon2id hashing) makes even modest per-IP rates
 // attractive for credential stuffing / brute force. ~1 attempt every 2s with a
@@ -368,61 +369,111 @@ const (
 	authRateBurst            = 5
 )
 
-var (
-	authVisitors = make(map[string]*visitor)
-	authMu       sync.Mutex
+// generalRateRPS/generalRateBurst govern the general authenticated-route limiter.
+const (
+	generalRateRPS   rate.Limit = 10
+	generalRateBurst            = 20
 )
-
-// Background routine to cleanup old visitors from both limiter maps.
-func init() {
-	go func() {
-		for {
-			time.Sleep(time.Minute)
-			mu.Lock()
-			for ip, v := range visitors {
-				if time.Since(v.lastSeen) > 3*time.Minute {
-					delete(visitors, ip)
-				}
-			}
-			mu.Unlock()
-
-			authMu.Lock()
-			for ip, v := range authVisitors {
-				if time.Since(v.lastSeen) > 3*time.Minute {
-					delete(authVisitors, ip)
-				}
-			}
-			authMu.Unlock()
-		}
-	}()
-}
 
 // proxyMisconfigWarnThreshold is how many requests must be observed before the
 // single-IP-diversity check below fires (avoids a false positive from the first
 // few requests at cold start).
 const proxyMisconfigWarnThreshold = 50
 
-var (
-	visitorRequestCount     int
-	authVisitorRequestCount int
-	proxyMisconfigWarnOnce  sync.Once
-)
+// visitorTracker is one bucket of per-IP token-bucket limiters. It owns its
+// own lock, so distinct trackers (general vs. auth routes) never contend.
+type visitorTracker struct {
+	mu           sync.Mutex
+	visitors     map[string]*visitor
+	requestCount int
+	rps          rate.Limit
+	burst        int
+}
+
+func newVisitorTracker(rps rate.Limit, burst int) *visitorTracker {
+	return &visitorTracker{visitors: make(map[string]*visitor), rps: rps, burst: burst}
+}
+
+func (t *visitorTracker) getLimiter(ip string) *rate.Limiter {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	v, exists := t.visitors[ip]
+	if !exists {
+		v = &visitor{limiter: rate.NewLimiter(t.rps, t.burst), lastSeen: time.Now()}
+		t.visitors[ip] = v
+	} else {
+		v.lastSeen = time.Now()
+	}
+	t.requestCount++
+	return v.limiter
+}
+
+func (t *visitorTracker) expireIdle(maxIdle time.Duration) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	for ip, v := range t.visitors {
+		if time.Since(v.lastSeen) > maxIdle {
+			delete(t.visitors, ip)
+		}
+	}
+}
+
+func (t *visitorTracker) snapshot() (distinctIPs, requests int) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	return len(t.visitors), t.requestCount
+}
+
+// rateLimiters owns both per-IP limiter buckets (general + auth) and the
+// goroutine that expires idle entries. It replaces what used to be
+// package-level global maps/mutexes plus an uncancellable init() goroutine —
+// each RouterDependencies instance now gets its own, stoppable via Close(),
+// which also makes it safe to spin up multiple independent routers (e.g. in
+// tests) without sharing rate-limit state between them.
+type rateLimiters struct {
+	general            *visitorTracker
+	auth               *visitorTracker
+	proxyMisconfigOnce sync.Once
+	stop               chan struct{}
+}
+
+func newRateLimiters() *rateLimiters {
+	rl := &rateLimiters{
+		general: newVisitorTracker(generalRateRPS, generalRateBurst),
+		auth:    newVisitorTracker(authRateRPS, authRateBurst),
+		stop:    make(chan struct{}),
+	}
+	go rl.runCleanup()
+	return rl
+}
+
+// Close stops the background cleanup goroutine. Safe to call once.
+func (rl *rateLimiters) Close() {
+	close(rl.stop)
+}
+
+func (rl *rateLimiters) runCleanup() {
+	ticker := time.NewTicker(time.Minute)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ticker.C:
+			rl.general.expireIdle(3 * time.Minute)
+			rl.auth.expireIdle(3 * time.Minute)
+		case <-rl.stop:
+			return
+		}
+	}
+}
 
 // warnIfLikelyProxyMisconfigured logs once if every request so far has come
 // from the same IP after a meaningful sample size — the signature of
 // TRUST_PROXY_HEADERS=false behind a reverse proxy that strips/rewrites the
 // client's real IP, collapsing rate limiting and tutor-consent audit IPs onto
 // the proxy's loopback address (audit finding B3).
-func warnIfLikelyProxyMisconfigured() {
-	mu.Lock()
-	distinctGeneral := len(visitors)
-	generalCount := visitorRequestCount
-	mu.Unlock()
-
-	authMu.Lock()
-	distinctAuth := len(authVisitors)
-	authCount := authVisitorRequestCount
-	authMu.Unlock()
+func (rl *rateLimiters) warnIfLikelyProxyMisconfigured() {
+	distinctGeneral, generalCount := rl.general.snapshot()
+	distinctAuth, authCount := rl.auth.snapshot()
 
 	total := generalCount + authCount
 	if total < proxyMisconfigWarnThreshold {
@@ -431,7 +482,7 @@ func warnIfLikelyProxyMisconfigured() {
 	if distinctGeneral > 1 || distinctAuth > 1 {
 		return
 	}
-	proxyMisconfigWarnOnce.Do(func() {
+	rl.proxyMisconfigOnce.Do(func() {
 		slog.Warn("rate limiter has seen only one distinct client IP after many requests; "+
 			"if this server sits behind a reverse proxy, TRUST_PROXY_HEADERS is probably "+
 			"false when it should be true (see DEPLOYMENT.md)",
@@ -439,59 +490,29 @@ func warnIfLikelyProxyMisconfigured() {
 	})
 }
 
-func getVisitor(ip string) *rate.Limiter {
-	mu.Lock()
-	v, exists := visitors[ip]
-	if !exists {
-		limiter := rate.NewLimiter(10, 20)
-		visitors[ip] = &visitor{limiter, time.Now()}
-		v = visitors[ip]
-	} else {
-		v.lastSeen = time.Now()
-	}
-	visitorRequestCount++
-	mu.Unlock()
-
-	warnIfLikelyProxyMisconfigured()
-	return v.limiter
-}
-
-func getAuthVisitor(ip string) *rate.Limiter {
-	authMu.Lock()
-	v, exists := authVisitors[ip]
-	if !exists {
-		limiter := rate.NewLimiter(authRateRPS, authRateBurst)
-		authVisitors[ip] = &visitor{limiter, time.Now()}
-		v = authVisitors[ip]
-	} else {
-		v.lastSeen = time.Now()
-	}
-	authVisitorRequestCount++
-	authMu.Unlock()
-
-	warnIfLikelyProxyMisconfigured()
-	return v.limiter
-}
-
-func rateLimitMiddleware(next http.Handler) http.Handler {
+func (rl *rateLimiters) generalMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		limiter := getVisitor(httputil.ClientIP(r))
+		limiter := rl.general.getLimiter(httputil.ClientIP(r))
+		rl.warnIfLikelyProxyMisconfigured()
 		if !limiter.Allow() {
-			http.Error(w, `{"error":"too many requests"}`, http.StatusTooManyRequests)
+			httpproblem.WriteProblem(w, r, http.StatusTooManyRequests, "rate-limit-exceeded",
+				"Too Many Requests", "Rate limit exceeded")
 			return
 		}
 		next.ServeHTTP(w, r)
 	})
 }
 
-// authRateLimitMiddleware applies a much stricter per-IP limit to the public
+// authMiddleware applies a much stricter per-IP limit to the public
 // authentication routes, which are the most attractive target for credential
 // stuffing / brute force and previously had no rate limiting at all.
-func authRateLimitMiddleware(next http.Handler) http.Handler {
+func (rl *rateLimiters) authMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		limiter := getAuthVisitor(httputil.ClientIP(r))
+		limiter := rl.auth.getLimiter(httputil.ClientIP(r))
+		rl.warnIfLikelyProxyMisconfigured()
 		if !limiter.Allow() {
-			http.Error(w, `{"error":"too many requests"}`, http.StatusTooManyRequests)
+			httpproblem.WriteProblem(w, r, http.StatusTooManyRequests, "rate-limit-exceeded",
+				"Too Many Requests", "Rate limit exceeded")
 			return
 		}
 		next.ServeHTTP(w, r)

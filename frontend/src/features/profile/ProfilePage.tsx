@@ -10,6 +10,7 @@ import { useSyncStore } from '../../stores/useSyncStore';
 import { useNavigate } from 'react-router-dom';
 import type { ProfileProgressResponse } from '../content/types';
 import { templateTypeLabel } from '../content/types';
+import { ProfileProgressResponseSchema } from '../../lib/schema';
 
 export function ProfilePage() {
   const { user, token, refreshToken, updateUser } = useAuthStore();
@@ -22,7 +23,7 @@ export function ProfilePage() {
     queryKey: ['profile-progress'],
     queryFn: async () => {
       const { data } = await apiClient.get<ProfileProgressResponse>('/profile/progress');
-      return data;
+      return ProfileProgressResponseSchema.parse(data);
     },
   });
   const progress = progressQuery.data ?? null;

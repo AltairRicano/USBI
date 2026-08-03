@@ -5,6 +5,7 @@ import { invoke } from '@tauri-apps/api/core';
 import { Button } from '../../components/ui/Button';
 import { apiClient } from '../../lib/apiClient';
 import { buildAttemptPayload, enqueueProgress } from '../../lib/localSyncQueue';
+import { CompleteLevelResponseSchema, LevelDTOSchema } from '../../lib/schema';
 import type { CompleteLevelResponse, LevelDTO } from './types';
 import {
   normalizeCrosswordContent,
@@ -38,7 +39,7 @@ export function OfficialLevelPage() {
     enabled: Boolean(levelId),
     queryFn: async () => {
       const { data } = await apiClient.get<LevelDTO>(`/levels/${levelId}`);
-      return data;
+      return LevelDTOSchema.parse(data);
     },
   });
   const level = levelQuery.data ?? null;
@@ -93,7 +94,7 @@ export function OfficialLevelPage() {
         completed: true,
         client_finished_at: new Date().toISOString(),
       });
-      setResult(data);
+      setResult(CompleteLevelResponseSchema.parse(data));
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ['dashboard'] }),
         queryClient.invalidateQueries({ queryKey: ['profile-progress'] }),

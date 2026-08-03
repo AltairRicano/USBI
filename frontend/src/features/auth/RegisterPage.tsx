@@ -84,6 +84,7 @@ export default function RegisterPage() {
           tutor_name: tutorName,
           tutor_email: tutorEmail,
           privacy_notice_version: privacyNoticeVersion,
+          registration_token: data.registration_token,
         });
         navigate('/login', {
           state: {

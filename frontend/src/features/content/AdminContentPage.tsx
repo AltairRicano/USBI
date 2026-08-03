@@ -6,6 +6,7 @@ import { Input } from '../../components/ui/Input';
 import { apiClient } from '../../lib/apiClient';
 import type { LevelDTO, LevelSummaryDTO, LevelsPageDTO, SectionDTO, SectionsResponse } from './types';
 import { templateTypeLabel } from './types';
+import { LevelsPageDTOSchema, SectionsResponseSchema } from '../../lib/schema';
 import { LevelMakerForm } from './maker/LevelMakerForm';
 
 interface SectionEditForm {
@@ -52,8 +53,8 @@ export function AdminContentPage() {
         apiClient.get<SectionsResponse>('/sections?include_unpublished=true'),
         apiClient.get<LevelsPageDTO>('/levels?include_unpublished=true&page_size=50'),
       ]);
-      setSections(sectionResp.data.items);
-      setLevels(levelResp.data.items);
+      setSections(SectionsResponseSchema.parse(sectionResp.data).items);
+      setLevels(LevelsPageDTOSchema.parse(levelResp.data).items);
     } catch (err) {
       setError(errorMessage(err, 'No se pudo cargar el contenido.'));
     }

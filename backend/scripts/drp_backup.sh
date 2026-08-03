@@ -41,6 +41,13 @@ PGPASSWORD="${PGPASSWORD}" pg_dump \
 
 echo "[$(date -u '+%Y-%m-%dT%H:%M:%SZ')] Backup completed: ${FILENAME}"
 
-# Purge backups older than RETENTION_DAYS to stay within the 20GB on-premise limit
+# Checksum so a silently-corrupted backup is detected now, not during a real
+# restore emergency. drp_restore.sh verifies this file before restoring.
+sha256sum "${FILENAME}" > "${FILENAME}.sha256"
+echo "[$(date -u '+%Y-%m-%dT%H:%M:%SZ')] Checksum written: ${FILENAME}.sha256"
+
+# Purge backups (and their checksums) older than RETENTION_DAYS to stay within
+# the 20GB on-premise limit
 find "${BACKUP_DIR}" -name "usbi_backup_*.sql.zst" -mtime +"${RETENTION_DAYS}" -delete
+find "${BACKUP_DIR}" -name "usbi_backup_*.sql.zst.sha256" -mtime +"${RETENTION_DAYS}" -delete
 echo "[$(date -u '+%Y-%m-%dT%H:%M:%SZ')] Purged backups older than ${RETENTION_DAYS} days."

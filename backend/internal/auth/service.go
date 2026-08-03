@@ -201,11 +201,15 @@ func (s *Service) Register(ctx context.Context, req RegisterRequest) (RegisterRe
 		return RegisterResponse{}, fmt.Errorf("creating user: %w", err)
 	}
 
-	return RegisterResponse{
+	resp := RegisterResponse{
 		UserID:  userRow.ID,
 		Status:  userRow.Status,
 		Message: "User registered successfully",
-	}, nil
+	}
+	if status == domain.StatusPendingTutorConsent {
+		resp.RegistrationToken = tutorConsentRegistrationToken(userRow.ID, s.cfg.HMACSecret)
+	}
+	return resp, nil
 }
 
 // Login validates credentials and returns a signed JWT.
@@ -432,6 +436,21 @@ func (s *Service) SubmitTutorConsent(ctx context.Context, req TutorConsentReques
 	}
 	if status != string(domain.StatusPendingTutorConsent) {
 		return nil // Not pending (active/suspended/deleted): nothing to do, no email.
+	}
+
+	// Require proof that the caller was present at registration for this
+	// account. Without this check, anyone who learns a pending account's
+	// UUID could submit their own tutor_email here, delete the real
+	// pending token, and receive the verification link to activate someone
+	// else's minor account under their own claimed identity. On mismatch
+	// we no-op identically to the unknown-account branch above, so this
+	// stays indistinguishable from the outside (no enumeration oracle).
+	presentedMAC, decodeErr := base64.RawURLEncoding.DecodeString(req.RegistrationToken)
+	if decodeErr != nil {
+		return nil
+	}
+	if !crypto.VerifyHMAC([]byte("tutor-consent-registration|"+req.UserID.String()), presentedMAC, s.cfg.HMACSecret) {
+		return nil
 	}
 
 	rawToken, err := generateOpaqueToken()
@@ -779,6 +798,16 @@ func (s *Service) issueRefreshToken(ctx context.Context, userID uuid.UUID) (stri
 
 // generateOpaqueToken returns a URL-safe, 256-bit random token. Used for both
 // refresh tokens and tutor-consent verification links.
+// tutorConsentRegistrationToken derives a deterministic, verifiable proof that
+// the caller was present at registration time for userID. It is handed to the
+// client in RegisterResponse and must be echoed back in SubmitTutorConsent —
+// without it, anyone who merely learns a pending account's UUID could submit
+// themselves as the tutor and hijack the double opt-in (see audit finding).
+func tutorConsentRegistrationToken(userID uuid.UUID, secret []byte) string {
+	mac := crypto.GenerateHMAC([]byte("tutor-consent-registration|"+userID.String()), secret)
+	return base64.RawURLEncoding.EncodeToString(mac)
+}
+
 func generateOpaqueToken() (string, error) {
 	tokenBytes := make([]byte, 32)
 	if _, err := cryptorand.Read(tokenBytes); err != nil {
@@ -808,6 +837,9 @@ func validateTutorConsent(req TutorConsentRequest) error {
 	}
 	if req.PrivacyNoticeVersion == "" {
 		errs = append(errs, "privacy_notice_version is required")
+	}
+	if strings.TrimSpace(req.RegistrationToken) == "" {
+		errs = append(errs, "registration_token is required")
 	}
 	if len(errs) > 0 {
 		return errors.New(strings.Join(errs, "; "))

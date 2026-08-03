@@ -69,7 +69,9 @@ func TestCorsMiddlewareWildcardOptIn(t *testing.T) {
 }
 
 func TestAuthRateLimitMiddlewareBlocksAfterBurst(t *testing.T) {
-	handler := authRateLimitMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	rl := newRateLimiters()
+	defer rl.Close()
+	handler := rl.authMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	}))
 

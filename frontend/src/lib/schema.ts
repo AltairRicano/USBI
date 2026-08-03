@@ -75,10 +75,118 @@ export const AuthResponseSchema = z.object({
   user: UserSchema,
 });
 
+// ── Contenido / progreso / insignias ─────────────────────────────────────────
+// Espejan las interfaces homónimas en features/content/types.ts. Se usan
+// exclusivamente para validar en runtime las respuestas de red que afectan
+// XP, progreso e insignias (hallazgo de auditoría: el frontend solo tenía
+// tipado TS estático para estos datos). `content` de un nivel se deja como
+// unknown a propósito: cada plantilla de minijuego ya normaliza su propio
+// contenido de forma defensiva (ver normalize*Content en types.ts).
+
+export const TemplateTypeSchema = z.enum([
+  "trivia",
+  "puzzle",
+  "word_search",
+  "fake_news",
+  "crossword",
+  "memory",
+  "snakes_ladders",
+]);
+
+export const BadgeSchema = z.object({
+  id: z.string().uuid(),
+  name: z.string(),
+  xp_threshold: z.number(),
+  icon_key: z.string(),
+  earned_at: z.string(),
+});
+
+export const SectionDTOSchema = z.object({
+  id: z.string().uuid(),
+  title: z.string(),
+  description: z.string(),
+  color: z.string(),
+  is_published: z.boolean(),
+  created_by_admin_id: z.string().uuid().optional(),
+  created_at: z.string().optional(),
+});
+
+export const SectionsResponseSchema = z.object({
+  items: z.array(SectionDTOSchema),
+});
+
+export const LevelSummaryDTOSchema = z.object({
+  id: z.string().uuid(),
+  section_id: z.string().uuid(),
+  title: z.string(),
+  color: z.string(),
+  template_type: TemplateTypeSchema,
+  difficulty: z.number(),
+  is_published: z.boolean(),
+  created_at: z.string(),
+});
+
+export const LevelDTOSchema = LevelSummaryDTOSchema.extend({
+  content: z.unknown(),
+  created_by_admin_id: z.string().uuid().optional(),
+  updated_at: z.string().optional(),
+});
+
+export const LevelsPageDTOSchema = z.object({
+  items: z.array(LevelSummaryDTOSchema),
+  next_cursor: z.string().optional(),
+});
+
+export const CompleteLevelResponseSchema = z.object({
+  level_id: z.string().uuid(),
+  completed: z.boolean(),
+  attempt_number: z.number(),
+  xp_awarded: z.number(),
+  total_xp: z.number(),
+  current_streak: z.number(),
+  badges_awarded: z.array(BadgeSchema),
+});
+
+export const ProfileProgressResponseSchema = z.object({
+  total_xp: z.number(),
+  completed_levels: z.number(),
+  total_attempts: z.number(),
+  current_streak: z.number(),
+  badges: z.array(BadgeSchema),
+  levels: z.array(z.object({
+    level_id: z.string().uuid(),
+    title: z.string(),
+    template_type: TemplateTypeSchema,
+    difficulty: z.number(),
+    best_score: z.number(),
+    xp_total_for_level: z.number(),
+    attempts_count: z.number(),
+    first_completed_at: z.string().optional(),
+    last_completed_at: z.string().optional(),
+  })),
+});
+
+/**
+ * Forma de la sesión persistida en el Tauri Store local (usbi-session.json).
+ * Se valida al restaurar (secureSession.ts) porque ese archivo vive en el
+ * filesystem del usuario, fuera del control del backend — Zero Trust: un
+ * atacante local con acceso al filesystem podría editarlo para inyectar
+ * campos arbitrarios (p. ej. role: "admin") si no se validara la forma.
+ */
+export const StoredSessionSchema = z.object({
+  user: UserSchema,
+  token: z.string().min(1),
+  refreshToken: z.string().nullable(),
+  deviceId: z.string().nullable(),
+});
+
 export const RegisterResponseSchema = z.object({
   user_id: z.string().uuid(),
   status: z.enum(["active", "pending_tutor_consent"]),
   message: z.string(),
+  // Solo presente cuando status es "pending_tutor_consent". Debe reenviarse
+  // tal cual en el POST a /auth/tutor-consent (ver RegisterPage.tsx).
+  registration_token: z.string().optional(),
 });
 
 /**
@@ -160,16 +268,6 @@ export const PuzzleSchema = z.object({
   pieces: z.number().int().min(3).max(20).default(3),
   seed: z.number().int().optional(),
 });
-
-export const TemplateTypeSchema = z.enum([
-  "trivia",
-  "puzzle",
-  "word_search",
-  "fake_news",
-  "crossword",
-  "memory",
-  "snakes_ladders",
-]);
 
 export const LevelMetadataSchema = z.object({
   id: z.string().uuid(),

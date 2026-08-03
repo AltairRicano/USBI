@@ -22,6 +22,11 @@ type RegisterResponse struct {
 	UserID  uuid.UUID `json:"user_id"`
 	Status  string    `json:"status"`
 	Message string    `json:"message"`
+	// RegistrationToken is only set when Status is pending_tutor_consent.
+	// The client must echo it back in TutorConsentRequest — it proves the
+	// caller was present at registration, preventing third parties who
+	// merely learn the user_id from submitting themselves as the tutor.
+	RegistrationToken string `json:"registration_token,omitempty"`
 }
 
 // LoginRequest is the body for POST /api/v1/auth/login.
@@ -51,6 +56,9 @@ type TutorConsentRequest struct {
 	TutorName            string    `json:"tutor_name"`
 	TutorEmail           string    `json:"tutor_email"`
 	PrivacyNoticeVersion string    `json:"privacy_notice_version"`
+	// RegistrationToken must match the value returned by /auth/register for
+	// this UserID (see RegisterResponse.RegistrationToken).
+	RegistrationToken string `json:"registration_token"`
 }
 
 // ArcoRequestDTO is the body for POST /api/v1/arco.

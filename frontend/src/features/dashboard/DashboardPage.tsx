@@ -9,6 +9,7 @@ import type { SectionDTO, SectionsResponse, LevelsPageDTO, TemplateType } from '
 import { templateTypeLabel } from '../content/types';
 import { clearSecureSession } from '../../lib/secureSession';
 import { useSyncStore } from '../../stores/useSyncStore';
+import { SectionsResponseSchema, LevelsPageDTOSchema } from '../../lib/schema';
 
 function LocalContentSection({ navigate }: { navigate: NavigateFunction }) {
   const [localLevels, setLocalLevels] = useState<any[]>([]);
@@ -131,8 +132,8 @@ function LocalContentSection({ navigate }: { navigate: NavigateFunction }) {
               >
                 ✕
               </Button>
-              <div className="flex items-center gap-2">
-                <div className="w-8 h-8 rounded-full flex items-center justify-center text-white" style={{ backgroundColor: lvl.metadata.color || '#4caf50' }}>
+              <div className="flex items-center gap-2 min-w-0">
+                <div className="w-8 h-8 shrink-0 rounded-full flex items-center justify-center text-white" style={{ backgroundColor: lvl.metadata.color || '#4caf50' }}>
                   <TemplateIcon type={lvl.metadata.template_type} />
                 </div>
                 <h3 className="font-bold truncate pr-6" title={lvl.metadata.title}>{lvl.metadata.title}</h3>
@@ -225,7 +226,7 @@ function SectionAccordionItem({ section, navigate }: { section: SectionDTO; navi
     queryKey: ['section-levels', section.id],
     queryFn: async () => {
       const resp = await apiClient.get<LevelsPageDTO>(`/levels?section_id=${section.id}&page_size=50`);
-      return resp.data.items;
+      return LevelsPageDTOSchema.parse(resp.data).items;
     },
     enabled: isExpanded,
   });
@@ -238,14 +239,14 @@ function SectionAccordionItem({ section, navigate }: { section: SectionDTO; navi
         className="flex items-center justify-between p-5 cursor-pointer hover:bg-black/5 dark:hover:bg-white/5 transition-colors"
         onClick={() => setIsExpanded(!isExpanded)}
       >
-        <div className="flex items-center gap-4">
-          <div className="w-14 h-14 rounded-full shadow-inner flex items-center justify-center text-white font-bold text-2xl" style={{ backgroundColor: section.color || '#4caf50' }}>
+        <div className="flex items-center gap-4 min-w-0">
+          <div className="w-14 h-14 shrink-0 rounded-full shadow-inner flex items-center justify-center text-white font-bold text-2xl" style={{ backgroundColor: section.color || '#4caf50' }}>
             {section.title.charAt(0).toUpperCase()}
           </div>
-          <div>
-            <h3 className="text-2xl font-bold">{section.title}</h3>
+          <div className="min-w-0">
+            <h3 className="text-2xl font-bold truncate">{section.title}</h3>
             {section.description && (
-              <p className="text-sm text-[--color-muted] mt-1">{section.description}</p>
+              <p className="text-sm text-[--color-muted] mt-1 truncate">{section.description}</p>
             )}
           </div>
         </div>
@@ -310,7 +311,7 @@ export default function DashboardPage() {
     queryFn: async () => {
       const sectionsResp = await apiClient.get<SectionsResponse>('/sections');
       return {
-        sections: sectionsResp.data.items,
+        sections: SectionsResponseSchema.parse(sectionsResp.data).items,
       };
     },
   });

@@ -148,7 +148,7 @@ func main() {
 
 	// ── Router wiring ─────────────────────────────────────────────────────────
 	r := chi.NewRouter()
-	transport.SetupRoutes(r, transport.RouterDependencies{
+	stopRateLimiters := transport.SetupRoutes(r, transport.RouterDependencies{
 		AuthHandler:      auth.NewHandler(authSvc),
 		SyncHandler:      syncSvc.NewHandler(syncService),
 		LevelsHandler:    levels.NewHandler(levelsSvc),
@@ -166,6 +166,7 @@ func main() {
 		// pin a goroutine and one of the few pool connections forever (B5).
 		RequestTimeout: config.GetDurationEnv("REQUEST_TIMEOUT", 20*time.Second),
 	})
+	defer stopRateLimiters()
 
 	// ── TLS 1.2+ (RF69 — TLS 1.0/1.1 explicitly disabled) ────────────────────
 	// Only applies when TLS_CERT_FILE/TLS_KEY_FILE are set below and this

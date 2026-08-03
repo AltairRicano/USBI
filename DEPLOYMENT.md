@@ -154,6 +154,43 @@ NoNewPrivileges=true
 WantedBy=multi-user.target
 ```
 
+## Backups y recuperacion (DRP)
+
+`backend/scripts/drp_backup.sh` respalda la base con `pg_dump --format=plain`
+comprimido con `zstd`, escribe un checksum `.sha256` junto al archivo, y purga
+backups (y sus checksums) con mas de `USBI_BACKUP_RETENTION_DAYS` dias
+(default 30). Variables requeridas: `PGHOST`/`PGPORT`/`PGUSER`/`PGPASSWORD`/
+`PGDATABASE`. Opcional: `USBI_BACKUP_DIR` (default `/var/backups/usbi_db`).
+
+```sh
+PGHOST=... PGPORT=5432 PGUSER=usbi PGPASSWORD=... PGDATABASE=usbi_db \
+  bash backend/scripts/drp_backup.sh
+```
+
+Para restaurar, usa `backend/scripts/drp_restore.sh` (verifica el checksum
+automaticamente si el archivo `.sha256` esta presente, y pide confirmacion
+interactiva escribiendo el nombre de la base destino, salvo que se pase
+`--yes`):
+
+```sh
+PGHOST=... PGPORT=5432 PGUSER=usbi PGPASSWORD=... PGDATABASE=usbi_db \
+  bash backend/scripts/drp_restore.sh /ruta/al/usbi_backup_YYYYMMDD_HHMMSS.sql.zst
+```
+
+**Importante**: el restore reproduce sentencias `CREATE TABLE`/`INSERT` contra
+`PGDATABASE`, que debe existir y estar vacia (o ser aceptable sobrescribirla);
+el script no crea ni borra la base de datos por si mismo, a proposito, para
+que un typo en `PGDATABASE` no pueda destruir la base equivocada. Para
+restaurar sobre el mismo nombre de una base con datos reales: crea una base
+nueva vacia, restaura ahi, verifica, y solo entonces decide el corte
+(renombrar bases, o apuntar la app a la nueva). Todo el restore corre en una
+sola transaccion (`--single-transaction`): si algo falla a medias, revierte
+completo en vez de dejar un estado parcial.
+
+Verificado en la practica (2026-08-02): backup real + restore real contra una
+base temporal desechable en el mismo Postgres, confirmando que tablas,
+indices y conteos de filas coinciden exactamente con el origen.
+
 ## Checklist de release
 
 - `go test ./...` pasa en backend.
@@ -167,7 +204,9 @@ WantedBy=multi-user.target
 - Si Nginx es la única vía de acceso al backend, `TRUST_PROXY_HEADERS=true` en el
   `.env` del servidor (ver nota B3 en la sección Nginx arriba); si no, permanece
   `false`.
-- Backups de PostgreSQL probados fuera del horario de uso.
+- Backups de PostgreSQL probados fuera del horario de uso (ver "Backups y
+  recuperacion (DRP)" arriba: `drp_backup.sh` + `drp_restore.sh` contra una
+  base temporal, no solo generar el archivo).
 - Documentacion interna sensible separada antes de publicar el repositorio.
 
 ## Limitaciones conocidas

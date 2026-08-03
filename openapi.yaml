@@ -758,6 +758,14 @@ components:
           enum: [active, pending_tutor_consent]
         message:
           type: string
+        registration_token:
+          type: string
+          description: >-
+            Solo presente cuando status es pending_tutor_consent. El cliente
+            debe reenviarlo tal cual en TutorConsentRequestDTO.registration_token:
+            prueba que quien llama a /auth/tutor-consent estuvo presente en el
+            registro, evitando que un tercero que solo conozca el user_id se
+            autodesigne como tutor del menor.
 
     LoginRequestDTO:
       type: object
@@ -801,7 +809,7 @@ components:
 
     TutorConsentRequestDTO:
       type: object
-      required: [user_id, tutor_name, tutor_email, privacy_notice_version]
+      required: [user_id, tutor_name, tutor_email, privacy_notice_version, registration_token]
       additionalProperties: false
       properties:
         user_id:
@@ -814,6 +822,13 @@ components:
           format: email
         privacy_notice_version:
           type: string
+        registration_token:
+          type: string
+          description: >-
+            Valor devuelto en RegisterResponseDTO.registration_token para este
+            mismo user_id. Requerido; sin él (o si no coincide) la solicitud
+            se descarta silenciosamente igual que una cuenta inexistente, para
+            no filtrar existencia de cuentas.
 
     # ── User ──────────────────────────────────────────────────────────────────
     UserDTO:

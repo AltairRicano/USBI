@@ -183,16 +183,23 @@ export const SnakeLadderGame: React.FC<SnakeLadderGameProps> = ({ level, onCompl
          )}
          
          {showQuestionModal && currentQuestion && (
-             <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-                 <div className="bg-[--color-card] p-6 rounded-xl shadow-xl max-w-md w-full border border-[--color-border]">
-                     <h3 className="text-xl font-bold mb-4 text-[--color-primary]">Para tirar el dado, responde:</h3>
-                     <p className="text-lg mb-6 text-[--color-text-card]">{currentQuestion.question}</p>
+             // Tarjeta de pregunta con colores fijos (blanco/negro), no con las
+             // variables --color-* institucionales: los minijuegos usan
+             // deliberadamente una paleta propia separada de esa (ver nota C9
+             // en index.css). Ademas, --color-card/--color-primary aqui se
+             // usaban sin var(...), CSS invalido que dejaba la tarjeta
+             // transparente y el texto en el negro por defecto del navegador
+             // sobre el overlay oscuro -- ilegible en movil.
+             <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
+                 <div className="bg-white text-black p-6 rounded-xl shadow-xl max-w-md w-full border border-slate-200">
+                     <h3 className="text-xl font-bold mb-4 text-[#18529D]">Para tirar el dado, responde:</h3>
+                     <p className="text-lg mb-6">{currentQuestion.question}</p>
                      <div className="flex flex-col gap-3">
                          {currentQuestion.options.map((opt: string, idx: number) => (
                              <button
                                  key={idx}
                                  onClick={() => handleAnswer(idx)}
-                                 className="px-4 py-3 text-left border border-[--color-border] rounded-lg text-[--color-text-card] hover:bg-[var(--color-primary)]/10 hover:border-[--color-primary] transition-colors"
+                                 className="px-4 py-3 text-left border border-slate-300 rounded-lg hover:bg-[#18529D]/10 hover:border-[#18529D] transition-colors"
                              >
                                  {opt}
                              </button>

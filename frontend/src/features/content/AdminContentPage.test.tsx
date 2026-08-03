@@ -20,10 +20,10 @@ describe('AdminContentPage', () => {
   it('renders sections and levels', async () => {
     vi.mocked(apiClient.get).mockImplementation((url) => {
       if (url.includes('/sections')) {
-        return Promise.resolve({ data: { items: [{ id: 'sec-1', title: 'Sección 1', color: '#ff0000', is_published: true }] } });
+        return Promise.resolve({ data: { items: [{ id: '22222222-2222-4222-8222-222222222222', title: 'Sección 1', description: 'Descripción de prueba', color: '#ff0000', is_published: true }] } });
       }
       if (url.includes('/levels')) {
-        return Promise.resolve({ data: { items: [{ id: 'lvl-1', title: 'Nivel 1', difficulty: 1, color: '#00ff00', template_type: 'trivia', is_published: false }] } });
+        return Promise.resolve({ data: { items: [{ id: '11111111-1111-4111-8111-111111111111', section_id: '22222222-2222-4222-8222-222222222222', title: 'Nivel 1', difficulty: 1, color: '#00ff00', template_type: 'trivia', is_published: false, created_at: '2026-01-01T00:00:00Z' }] } });
       }
       return Promise.reject(new Error('Unexpected URL: ' + url));
     });
@@ -47,11 +47,11 @@ describe('AdminContentPage', () => {
       if (url.includes('/sections')) {
         return Promise.resolve({ data: { items: [] } });
       }
-      if (url === '/levels/lvl-1') {
-        return Promise.resolve({ data: { id: 'lvl-1', title: 'Nivel 1', color: '#00ff00', difficulty: 1, template_type: 'trivia', content: [{ question: 'Q?', options: ['1','2','3','4'], correct_index: 0 }] } });
+      if (url === '/levels/11111111-1111-4111-8111-111111111111') {
+        return Promise.resolve({ data: { id: '11111111-1111-4111-8111-111111111111', title: 'Nivel 1', color: '#00ff00', difficulty: 1, template_type: 'trivia', content: [{ question: 'Q?', options: ['1','2','3','4'], correct_index: 0 }] } });
       }
       if (url.includes('/levels')) {
-        return Promise.resolve({ data: { items: [{ id: 'lvl-1', title: 'Nivel 1', difficulty: 1, color: '#00ff00', template_type: 'trivia', is_published: false }] } });
+        return Promise.resolve({ data: { items: [{ id: '11111111-1111-4111-8111-111111111111', section_id: '22222222-2222-4222-8222-222222222222', title: 'Nivel 1', difficulty: 1, color: '#00ff00', template_type: 'trivia', is_published: false, created_at: '2026-01-01T00:00:00Z' }] } });
       }
       return Promise.resolve({ data: { items: [] } });
     });

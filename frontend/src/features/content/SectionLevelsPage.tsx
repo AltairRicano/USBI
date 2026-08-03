@@ -4,6 +4,7 @@ import { Button } from '../../components/ui/Button';
 import { apiClient } from '../../lib/apiClient';
 import type { LevelSummaryDTO, LevelsPageDTO, SectionDTO, SectionsResponse } from './types';
 import { templateTypeLabel } from './types';
+import { LevelsPageDTOSchema, SectionsResponseSchema } from '../../lib/schema';
 
 export function SectionLevelsPage() {
   const { sectionId } = useParams();
@@ -15,9 +16,10 @@ export function SectionLevelsPage() {
         apiClient.get<SectionsResponse>('/sections'),
         apiClient.get<LevelsPageDTO>(`/levels?section_id=${sectionId}&page_size=50`),
       ]);
+      const sections = SectionsResponseSchema.parse(sectionResp.data).items;
       return {
-        section: sectionResp.data.items.find((item) => item.id === sectionId) ?? null,
-        levels: levelResp.data.items,
+        section: sections.find((item) => item.id === sectionId) ?? null,
+        levels: LevelsPageDTOSchema.parse(levelResp.data).items,
       };
     },
   });

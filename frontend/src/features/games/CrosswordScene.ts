@@ -16,7 +16,42 @@ export class CrosswordScene extends Phaser.Scene {
   private cellRects: Map<string, Phaser.GameObjects.Rectangle> = new Map();
   private cellTexts: Map<string, Phaser.GameObjects.Text> = new Map();
   private highlightGraphics!: Phaser.GameObjects.Graphics;
-  
+
+  // Real, off-screen DOM <input> that mirrors the Phaser canvas's keyboard
+  // handling. A canvas cannot receive OS focus, so mobile browsers never open
+  // the virtual keyboard on tap — only a real editable HTML element triggers
+  // it. Focusing it must happen synchronously inside the pointerdown handler
+  // (iOS Safari refuses to open the keyboard from a focus() call outside the
+  // original user-gesture call stack).
+  private domInput?: HTMLInputElement;
+  private handleDomInput = (event: Event) => {
+    const target = event.target as HTMLInputElement;
+    const value = target.value;
+    target.value = '';
+    if (!value) return;
+    const lastChar = value[value.length - 1];
+    if (/[a-zA-ZñÑ]/.test(lastChar)) {
+      this.engine.inputChar(lastChar);
+    }
+  };
+  private handleDomKeyDown = (event: KeyboardEvent) => {
+    if (event.key === 'Backspace') {
+      event.preventDefault();
+      this.engine.inputChar('');
+      const state = this.engine.getState();
+      if (state.orientation === 'horizontal') this.engine.navigate(-1, 0);
+      else this.engine.navigate(0, -1);
+    } else if (event.key === 'ArrowRight') {
+      this.engine.navigate(1, 0);
+    } else if (event.key === 'ArrowLeft') {
+      this.engine.navigate(-1, 0);
+    } else if (event.key === 'ArrowDown') {
+      this.engine.navigate(0, 1);
+    } else if (event.key === 'ArrowUp') {
+      this.engine.navigate(0, -1);
+    }
+  };
+
   constructor() {
     super('CrosswordScene');
   }
@@ -103,6 +138,7 @@ export class CrosswordScene extends Phaser.Scene {
 
       rect.on('pointerdown', () => {
         this.engine.selectCell(c.x, c.y);
+        this.domInput?.focus();
       });
 
       const text = this.add
@@ -150,6 +186,7 @@ export class CrosswordScene extends Phaser.Scene {
     container.y = (this.cameras.main.height - scaledH) / 2;
 
     this.input.keyboard!.on('keydown', this.handleKeyDown, this);
+    this.createDomInput();
 
     this.unsubscribeEngine = this.engine.subscribe((newState) => {
       this.drawState(newState);
@@ -186,6 +223,34 @@ export class CrosswordScene extends Phaser.Scene {
     });
   }
 
+  private createDomInput() {
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.setAttribute('autocomplete', 'off');
+    input.setAttribute('autocorrect', 'off');
+    input.setAttribute('autocapitalize', 'none');
+    input.setAttribute('spellcheck', 'false');
+    input.setAttribute('aria-hidden', 'true');
+    input.tabIndex = -1;
+    // Off-screen but real/focusable — a display:none or 0x0 input is ignored
+    // by some mobile browsers' focus handling.
+    Object.assign(input.style, {
+      position: 'fixed',
+      top: '0',
+      left: '0',
+      width: '1px',
+      height: '1px',
+      opacity: '0',
+      border: 'none',
+      padding: '0',
+      pointerEvents: 'none',
+    });
+    input.addEventListener('input', this.handleDomInput);
+    input.addEventListener('keydown', this.handleDomKeyDown);
+    document.body.appendChild(input);
+    this.domInput = input;
+  }
+
   private handleKeyDown(event: KeyboardEvent) {
     if (event.key === 'ArrowRight') {
       this.engine.navigate(1, 0);
@@ -210,6 +275,12 @@ export class CrosswordScene extends Phaser.Scene {
     if (this.unsubscribeEngine) {
       this.unsubscribeEngine();
       this.unsubscribeEngine = undefined;
+    }
+    if (this.domInput) {
+      this.domInput.removeEventListener('input', this.handleDomInput);
+      this.domInput.removeEventListener('keydown', this.handleDomKeyDown);
+      this.domInput.remove();
+      this.domInput = undefined;
     }
     this.cellRects.forEach(r => r.off('pointerdown'));
     this.cellRects.clear();

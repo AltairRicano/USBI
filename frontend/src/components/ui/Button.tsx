@@ -13,8 +13,8 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
         ref={ref}
         className={cn(
           // Base
-          'inline-flex items-center justify-center rounded-xl font-medium',
-          'transition-transform hover:scale-105 active:scale-95',
+          'inline-flex items-center justify-center gap-2 rounded-xl font-medium',
+          'transition-[transform,box-shadow] hover:scale-[1.02] active:scale-95',
           'disabled:pointer-events-none disabled:opacity-50',
           // Accesibilidad motriz (WCAG 2.5.5)
           'min-h-[44px] min-w-[44px]',
@@ -23,15 +23,17 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
           'focus-visible:ring-[--color-primary] focus-visible:ring-offset-2',
           // Variantes
           {
-            'bg-[var(--color-primary)] text-[var(--color-primary-foreground)] hover:bg-[var(--color-primary-hover)]':
+            'bg-[var(--color-primary)] text-[var(--color-primary-foreground)] shadow-sm hover:bg-[var(--color-primary-hover)] hover:shadow-md':
               variant === 'primary',
-            'bg-[var(--color-secondary-dark)] text-white hover:opacity-90':
+            'bg-[var(--color-secondary-dark)] text-white shadow-sm hover:opacity-90 hover:shadow-md':
               variant === 'secondary',
             'border-2 border-[var(--color-primary)] text-[var(--color-primary)] hover:bg-[var(--color-primary)] hover:text-[var(--color-primary-foreground)]':
               variant === 'outline',
-            'bg-[var(--color-error)] text-white hover:opacity-90':
+            'bg-[var(--color-error)] text-white shadow-sm hover:opacity-90 hover:shadow-md':
               variant === 'danger',
-            'hover:bg-gray-100 text-gray-700':
+            // Theme-aware: el gris fijo anterior (text-gray-700) quedaba con
+            // contraste pobre sobre superficies oscuras.
+            'text-[--color-foreground] hover:bg-black/5 dark:hover:bg-white/10':
               variant === 'ghost',
           },
           // Tamaños

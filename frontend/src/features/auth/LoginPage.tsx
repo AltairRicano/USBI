@@ -2,6 +2,7 @@ import { useState, type FormEvent } from 'react';
 import { useNavigate, useLocation, Link } from 'react-router-dom';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
+import { UsbiEmblem, Spinner } from '../../components/ui/Brand';
 import { useAuthStore } from '../../stores/useAuthStore';
 import { useSyncStore } from '../../stores/useSyncStore';
 import { apiClient } from '../../lib/apiClient';
@@ -111,91 +112,126 @@ export default function LoginPage() {
       className="min-h-screen flex items-center justify-center p-4"
       style={{ backgroundColor: 'var(--color-surface)' }}
     >
-
-
       <div
-        className="w-full max-w-md rounded-2xl shadow-xl p-8 space-y-6"
-        style={{ backgroundColor: 'var(--color-card)' }}
+        className="w-full max-w-md overflow-hidden rounded-2xl shadow-xl"
+        style={{ backgroundColor: 'var(--color-card)', color: 'var(--color-text-card)' }}
       >
-        {/* Encabezado institucional */}
-        <header className="text-center space-y-1">
-          <h1 className="text-2xl font-bold" style={{ color: 'var(--color-primary)' }}>
-            USBI
-          </h1>
-          <p className="text-sm" style={{ color: 'var(--color-muted)' }}>
-            Universidad Veracruzana
-          </p>
-        </header>
+        {/* Franja institucional (azul UV → verde UV) */}
+        <div
+          aria-hidden="true"
+          className="h-1.5 w-full"
+          style={{ background: 'linear-gradient(90deg, var(--color-primary), var(--color-secondary))' }}
+        />
 
-        {/* Formulario */}
-        <form
-          onSubmit={handleSubmit}
-          className="space-y-4"
-          aria-label="Formulario de inicio de sesión"
-          noValidate
-        >
-          <Input
-            id="login-email"
-            label="Correo institucional"
-            type="email"
-            autoComplete="email"
-            placeholder="correo@uv.mx"
-            value={email}
-            onChange={(e) => setEmail(e.currentTarget.value)}
-            required
-            aria-required="true"
-          />
-
-          <Input
-            id="login-password"
-            label="Contraseña"
-            type={showPassword ? 'text' : 'password'}
-            autoComplete="current-password"
-            placeholder="••••••••"
-            value={password}
-            onChange={(e) => setPassword(e.currentTarget.value)}
-            required
-            aria-required="true"
-            error={error ?? undefined}
-            rightIcon={
-              <button
-                type="button"
-                onClick={() => setShowPassword(!showPassword)}
-                aria-label={showPassword ? 'Ocultar contraseña' : 'Mostrar contraseña'}
-                className="p-1 hover:text-[--color-foreground] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[--color-primary] rounded"
-              >
-                {showPassword ? <EyeOffIcon /> : <EyeIcon />}
-              </button>
-            }
-          />
+        <div className="space-y-6 p-8">
+          {/* Encabezado institucional */}
+          <header className="flex flex-col items-center gap-3 text-center">
+            <UsbiEmblem />
+            <div className="space-y-0.5">
+              <h1 className="text-2xl font-bold" style={{ color: 'var(--color-primary)' }}>
+                USBI
+              </h1>
+              <p className="text-sm" style={{ color: 'var(--color-muted)' }}>
+                Universidad Veracruzana
+              </p>
+            </div>
+          </header>
 
           {notice && (
-            <p className="rounded border border-[--color-border] bg-[--color-card] p-3 text-sm text-[--color-primary]">
+            <p
+              className="rounded-lg border p-3 text-sm"
+              style={{
+                borderColor: 'var(--color-border)',
+                color: 'var(--color-primary)',
+                backgroundColor: 'color-mix(in srgb, var(--color-primary) 8%, transparent)',
+              }}
+            >
               {notice}
             </p>
           )}
 
-          <Button
-            type="submit"
-            size="lg"
-            className="w-full font-bold"
-            disabled={loading}
-            aria-busy={loading}
+          {/* Formulario */}
+          <form
+            onSubmit={handleSubmit}
+            className="space-y-4"
+            aria-label="Formulario de inicio de sesión"
+            noValidate
           >
-            {loading ? 'Iniciando sesión…' : 'Iniciar sesión'}
-          </Button>
-        </form>
+            <Input
+              id="login-email"
+              label="Correo institucional"
+              type="email"
+              autoComplete="email"
+              placeholder="correo@uv.mx"
+              value={email}
+              onChange={(e) => setEmail(e.currentTarget.value)}
+              required
+              aria-required="true"
+            />
 
-        <div className="text-center text-sm">
-          {/* inline-flex + padding lets min-height (WCAG 2.5.5, C6) apply — a
-              plain inline <a> ignores min-height entirely. */}
-          <Link
-            to="/register"
-            style={{ color: 'var(--color-primary)' }}
-            className="inline-flex items-center justify-center py-2 hover:underline"
-          >
-            ¿No tienes cuenta? Regístrate
-          </Link>
+            <Input
+              id="login-password"
+              label="Contraseña"
+              type={showPassword ? 'text' : 'password'}
+              autoComplete="current-password"
+              placeholder="••••••••"
+              value={password}
+              onChange={(e) => setPassword(e.currentTarget.value)}
+              required
+              aria-required="true"
+              rightIcon={
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  aria-label={showPassword ? 'Ocultar contraseña' : 'Mostrar contraseña'}
+                  className="p-1 hover:text-[--color-foreground] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[--color-primary] rounded"
+                >
+                  {showPassword ? <EyeOffIcon /> : <EyeIcon />}
+                </button>
+              }
+            />
+
+            {/* Error a nivel de formulario (credenciales/servidor): va cerca de
+                la acción, no incrustado en un campo concreto (WCAG 3.3.1). */}
+            {error && (
+              <p
+                role="alert"
+                aria-live="assertive"
+                className="flex items-start gap-2 rounded-lg border p-3 text-sm"
+                style={{
+                  borderColor: 'var(--color-error)',
+                  color: 'var(--color-error)',
+                  backgroundColor: 'color-mix(in srgb, var(--color-error) 8%, transparent)',
+                }}
+              >
+                <span aria-hidden="true">⚠</span>
+                <span>{error}</span>
+              </p>
+            )}
+
+            <Button
+              type="submit"
+              size="lg"
+              className="w-full font-bold"
+              disabled={loading}
+              aria-busy={loading}
+            >
+              {loading && <Spinner />}
+              {loading ? 'Iniciando sesión…' : 'Iniciar sesión'}
+            </Button>
+          </form>
+
+          <div className="text-center text-sm">
+            {/* inline-flex + padding lets min-height (WCAG 2.5.5, C6) apply — a
+                plain inline <a> ignores min-height entirely. */}
+            <Link
+              to="/register"
+              style={{ color: 'var(--color-primary)' }}
+              className="inline-flex items-center justify-center py-2 hover:underline"
+            >
+              ¿No tienes cuenta? Regístrate
+            </Link>
+          </div>
         </div>
       </div>
     </main>

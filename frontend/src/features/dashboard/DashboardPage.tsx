@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { useAuthStore } from '../../stores/useAuthStore';
 import { useSettingsStore } from '../../stores/useSettingsStore';
 import { Button } from '../../components/ui/Button';
+import { UsbiEmblem } from '../../components/ui/Brand';
 import { apiClient } from '../../lib/apiClient';
 import { useNavigate, NavigateFunction } from 'react-router-dom';
 import type { SectionDTO, SectionsResponse, LevelsPageDTO, TemplateType } from '../content/types';
@@ -235,9 +236,18 @@ function SectionAccordionItem({ section, navigate }: { section: SectionDTO; navi
 
   return (
     <article className="rounded-xl bg-[--color-card] text-[--color-text-card] overflow-hidden shadow-md transition-all duration-300">
-      <div 
-        className="flex items-center justify-between p-5 cursor-pointer hover:bg-black/5 dark:hover:bg-white/5 transition-colors"
+      <div
+        role="button"
+        tabIndex={0}
+        aria-expanded={isExpanded}
+        className="flex items-center justify-between p-5 cursor-pointer hover:bg-black/5 dark:hover:bg-white/5 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[--color-primary] focus-visible:ring-inset"
         onClick={() => setIsExpanded(!isExpanded)}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            setIsExpanded((v) => !v);
+          }
+        }}
       >
         <div className="flex items-center gap-4 min-w-0">
           <div className="w-14 h-14 shrink-0 rounded-full shadow-inner flex items-center justify-center text-white font-bold text-2xl" style={{ backgroundColor: section.color || '#4caf50' }}>
@@ -305,6 +315,16 @@ export default function DashboardPage() {
   
   const [activeTab, setActiveTab] = useState<'public' | 'local'>('public');
   const [isMenuOpen, setIsMenuOpen] = useState(false);
+
+  // Cerrar el menú lateral con Escape (patrón modal-escape / accesibilidad).
+  useEffect(() => {
+    if (!isMenuOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setIsMenuOpen(false);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [isMenuOpen]);
 
   const dashboardQuery = useQuery({
     queryKey: ['dashboard'],
@@ -393,6 +413,7 @@ export default function DashboardPage() {
                 </div>
               </div>
             </div>
+            <UsbiEmblem size={40} className="hidden sm:inline-flex" />
             <h1 className="text-3xl font-bold" style={{ color: 'var(--color-primary)' }}>
               Bienvenido, {user?.full_name}
             </h1>
@@ -434,8 +455,8 @@ export default function DashboardPage() {
             onClick={() => setActiveTab('public')}
             className={`px-8 py-2 rounded-full font-bold transition-all duration-200 ${
               activeTab === 'public'
-                ? 'bg-black text-white dark:bg-white dark:text-black shadow-md'
-                : 'text-[--color-muted] hover:text-[--color-text]'
+                ? 'bg-[--color-primary] text-[--color-primary-foreground] shadow-md'
+                : 'text-[--color-muted] hover:text-[--color-foreground]'
             }`}
           >
             Públicos
@@ -444,8 +465,8 @@ export default function DashboardPage() {
             onClick={() => setActiveTab('local')}
             className={`px-8 py-2 rounded-full font-bold transition-all duration-200 ${
               activeTab === 'local'
-                ? 'bg-black text-white dark:bg-white dark:text-black shadow-md'
-                : 'text-[--color-muted] hover:text-[--color-text]'
+                ? 'bg-[--color-primary] text-[--color-primary-foreground] shadow-md'
+                : 'text-[--color-muted] hover:text-[--color-foreground]'
             }`}
           >
             Míos

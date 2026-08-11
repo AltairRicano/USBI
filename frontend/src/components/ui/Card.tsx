@@ -11,7 +11,11 @@ export const Card = forwardRef<HTMLDivElement, CardProps>(
       <div
         ref={ref}
         className={cn(
-          'bg-[--color-background] rounded-2xl shadow-lg border border-[--color-border]',
+          // Usa la superficie de tarjeta (no el fondo de página) para tener
+          // elevación real en modo oscuro: el fondo es casi negro (#020617) y
+          // la tarjeta es un gris azulado elevado (#1e293b). En modo claro
+          // ambos son blancos, así que no cambia nada visualmente.
+          'bg-[--color-card] text-[--color-text-card] rounded-2xl shadow-lg border border-[--color-border]',
           'overflow-hidden transition-shadow hover:shadow-xl',
           {
             'p-0': padding === 'none',

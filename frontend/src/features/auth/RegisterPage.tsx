@@ -2,6 +2,7 @@ import { useState, type FormEvent } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
+import { UsbiEmblem, Spinner } from '../../components/ui/Brand';
 import { apiClient } from '../../lib/apiClient';
 import axios from 'axios';
 import { ZodError } from 'zod';
@@ -118,16 +119,27 @@ export default function RegisterPage() {
       style={{ backgroundColor: 'var(--color-surface)' }}
     >
       <div
-        className="w-full max-w-md rounded-2xl shadow-xl p-8 space-y-6"
-        style={{ backgroundColor: 'var(--color-card)' }}
+        className="w-full max-w-md overflow-hidden rounded-2xl shadow-xl"
+        style={{ backgroundColor: 'var(--color-card)', color: 'var(--color-text-card)' }}
       >
-        <header className="text-center space-y-1">
-          <h1 className="text-2xl font-bold" style={{ color: 'var(--color-primary)' }}>
-            Registro USBI
-          </h1>
-          <p className="text-sm" style={{ color: 'var(--color-muted)' }}>
-            Crea tu cuenta institucional
-          </p>
+        {/* Franja institucional (azul UV → verde UV) */}
+        <div
+          aria-hidden="true"
+          className="h-1.5 w-full"
+          style={{ background: 'linear-gradient(90deg, var(--color-primary), var(--color-secondary))' }}
+        />
+
+        <div className="space-y-6 p-8">
+        <header className="flex flex-col items-center gap-3 text-center">
+          <UsbiEmblem />
+          <div className="space-y-0.5">
+            <h1 className="text-2xl font-bold" style={{ color: 'var(--color-primary)' }}>
+              Registro USBI
+            </h1>
+            <p className="text-sm" style={{ color: 'var(--color-muted)' }}>
+              Crea tu cuenta institucional
+            </p>
+          </div>
         </header>
 
         <form onSubmit={handleSubmit} className="space-y-4" noValidate>
@@ -175,7 +187,6 @@ export default function RegisterPage() {
             value={confirmPassword}
             onChange={(e) => setConfirmPassword(e.currentTarget.value)}
             required
-            error={error ?? undefined}
             rightIcon={
               <button
                 type="button"
@@ -235,13 +246,32 @@ export default function RegisterPage() {
             </label>
           </div>
 
+          {/* Error a nivel de formulario (validación combinada / servidor). */}
+          {error && (
+            <p
+              role="alert"
+              aria-live="assertive"
+              className="flex items-start gap-2 rounded-lg border p-3 text-sm"
+              style={{
+                borderColor: 'var(--color-error)',
+                color: 'var(--color-error)',
+                backgroundColor: 'color-mix(in srgb, var(--color-error) 8%, transparent)',
+              }}
+            >
+              <span aria-hidden="true">⚠</span>
+              <span>{error}</span>
+            </p>
+          )}
+
           <Button
             type="submit"
             size="lg"
             className="w-full font-bold"
             disabled={loading}
+            aria-busy={loading}
           >
-            {loading ? 'Registrando...' : 'Registrar'}
+            {loading && <Spinner />}
+            {loading ? 'Registrando…' : 'Registrar'}
           </Button>
         </form>
         
@@ -255,6 +285,7 @@ export default function RegisterPage() {
           >
             ¿Ya tienes cuenta? Inicia sesión
           </Link>
+        </div>
         </div>
       </div>
     </main>

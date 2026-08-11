@@ -23,3 +23,7 @@ backend/cmd/server/server
 
 # Docs Reference (Ignored for GitHub)
 docs_referencia/
+CLAUDE.md
+CLAUDE_SKILLS.md
+AUDITORIA_PREPARACION_PRODUCCION.md
+plan/

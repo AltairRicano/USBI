@@ -99,11 +99,22 @@ func (m *SMTPMailer) Send(ctx context.Context, to, subject, textBody string) err
 	defer func() { _ = client.Close() }()
 
 	if !m.cfg.ImplicitTLS {
-		if ok, _ := client.Extension("STARTTLS"); ok {
-			if err := client.StartTLS(tlsCfg); err != nil {
-				return fmt.Errorf("mailer: starttls: %w", err)
-			}
+		// STARTTLS is mandatory, not opportunistic: a MITM that strips the
+		// STARTTLS capability from the server's EHLO must NOT be able to
+		// downgrade this exchange to plaintext (CN-002 / STARTTLS stripping).
+		if ok, _ := client.Extension("STARTTLS"); !ok {
+			return fmt.Errorf("mailer: server does not advertise STARTTLS; refusing to send over an unencrypted connection")
 		}
+		if err := client.StartTLS(tlsCfg); err != nil {
+			return fmt.Errorf("mailer: starttls: %w", err)
+		}
+	}
+
+	// Defence-in-depth: never transmit credentials or the message body unless
+	// the connection is actually encrypted — an implicit-TLS dial or a completed
+	// STARTTLS upgrade. Guards against ever sending AUTH PLAIN in cleartext.
+	if _, isTLS := client.TLSConnectionState(); !isTLS {
+		return fmt.Errorf("mailer: connection is not encrypted; refusing to authenticate or send")
 	}
 
 	if m.cfg.Username != "" {

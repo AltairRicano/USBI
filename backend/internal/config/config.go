@@ -12,6 +12,7 @@ import (
 	"net/url"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/joho/godotenv"
@@ -45,6 +46,15 @@ func DatabaseURL() string {
 	dbPort := GetEnv("DB_PORT", "5432")
 	dbName := RequireEnv("DB_NAME")
 	sslMode := GetEnv("DB_SSLMODE", "disable")
+
+	// A cleartext DB connection is only acceptable when it never leaves the host
+	// (loopback). Warn loudly otherwise: credentials and personal data would
+	// travel unencrypted (CN-008).
+	if sslMode == "disable" && !isLoopbackHost(dbHost) {
+		log.Printf("[WARN] DB_SSLMODE=disable with non-loopback DB_HOST=%q: database traffic "+
+			"(credentials and personal data) is unencrypted. Use DB_SSLMODE=require or "+
+			"verify-full when the database is not on localhost.", dbHost)
+	}
 
 	dsn := &url.URL{
 		Scheme: "postgres",
@@ -83,6 +93,17 @@ func RequireSecret(key string) string {
 			key, MinSecretLength, len(val))
 	}
 	return val
+}
+
+// isLoopbackHost reports whether host is a local loopback address, where an
+// unencrypted DB_SSLMODE=disable connection never leaves the machine.
+func isLoopbackHost(host string) bool {
+	switch strings.ToLower(strings.TrimSpace(host)) {
+	case "127.0.0.1", "localhost", "::1", "[::1]":
+		return true
+	default:
+		return false
+	}
 }
 
 // GetEnv returns the environment variable value or a fallback default.

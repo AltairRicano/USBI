@@ -91,6 +91,7 @@ func SetupRoutes(r chi.Router, deps RouterDependencies) func() {
 	// Per-request deadline (B5): cancels the request context so slow queries /
 	// blocked advisory locks release their goroutine and pool connection.
 	r.Use(middleware.Timeout(requestTimeout))
+	r.Use(securityHeaders)
 	r.Use(corsMiddleware(origin))
 	r.Use(maxBodyBytesMiddleware(deps.MaxBodyBytes))
 
@@ -259,6 +260,28 @@ func notImplementedHandler(operation string) http.HandlerFunc {
 			"Not Implemented",
 			"Operation '"+operation+"' is pending implementation.")
 	}
+}
+
+// securityHeaders sets conservative, framework-agnostic security response
+// headers on every response (audit finding CN-003). It hardens the JSON API and
+// any direct browser navigation to an API URL — including the tutor-consent
+// verify link, whose Referrer-Policy: no-referrer stops the single-use token
+// from leaking via the Referer header (CN-006). The SPA served by the reverse
+// proxy still needs its own Content-Security-Policy configured there.
+func securityHeaders(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		h := w.Header()
+		h.Set("X-Content-Type-Options", "nosniff")
+		h.Set("X-Frame-Options", "DENY")
+		h.Set("Referrer-Policy", "no-referrer")
+		h.Set("Content-Security-Policy", "default-src 'none'; frame-ancestors 'none'")
+		// Only assert HSTS when this process terminates TLS itself; behind a
+		// reverse proxy, the TLS terminator (Nginx) owns this header.
+		if r.TLS != nil {
+			h.Set("Strict-Transport-Security", "max-age=63072000; includeSubDomains")
+		}
+		next.ServeHTTP(w, r)
+	})
 }
 
 // corsMiddleware applies CORS headers. The origin is configurable to support

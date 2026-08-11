@@ -103,6 +103,19 @@ server {
     root /srv/usbi/frontend/dist;
     index index.html;
 
+    # Cabeceras de seguridad (hallazgo de auditoría CN-003). La SPA se sirve como
+    # estáticos directamente por Nginx, así que su Content-Security-Policy debe
+    # configurarse AQUÍ (el backend Go solo endurece sus propias respuestas JSON).
+    add_header X-Content-Type-Options "nosniff" always;
+    add_header X-Frame-Options "DENY" always;
+    add_header Referrer-Policy "no-referrer" always;
+    add_header Strict-Transport-Security "max-age=63072000; includeSubDomains" always;
+    # Punto de partida: AJUSTAR contra el build real de Vite/Phaser antes de
+    # producción. Si el index.html generado incluye un <script> inline (polyfill
+    # de module-preload de Vite), añade su hash sha256 a script-src o usa un nonce;
+    # si Phaser 4 compila WASM en runtime, añade 'wasm-unsafe-eval' a script-src.
+    add_header Content-Security-Policy "default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; font-src 'self' data:; script-src 'self'; connect-src 'self'; worker-src 'self' blob:; object-src 'none'; frame-ancestors 'none'; base-uri 'self'" always;
+
     location /api/v1/ {
         proxy_pass http://127.0.0.1:8080/api/v1/;
         proxy_set_header Host $host;
@@ -201,6 +214,10 @@ indices y conteos de filas coinciden exactamente con el origen.
 - `/health/live` responde `200`.
 - `/health/ready` responde `200` con PostgreSQL disponible.
 - Nginx sirve `frontend/dist` y proxifica `/api/v1`.
+- Nginx emite las cabeceras de seguridad (`X-Content-Type-Options`, `X-Frame-Options`,
+  `Referrer-Policy`, `Strict-Transport-Security`, `Content-Security-Policy`) y la CSP
+  fue validada contra el build real de Vite/Phaser (ver nota CN-003 en la sección
+  Nginx). El backend también las emite en las respuestas del API.
 - Si Nginx es la única vía de acceso al backend, `TRUST_PROXY_HEADERS=true` en el
   `.env` del servidor (ver nota B3 en la sección Nginx arriba); si no, permanece
   `false`.

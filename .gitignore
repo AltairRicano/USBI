@@ -20,3 +20,6 @@ database-data/
 backend/server
 backend/main
 backend/cmd/server/server
+
+# Docs Reference (Ignored for GitHub)
+docs_referencia/

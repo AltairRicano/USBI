@@ -188,17 +188,24 @@ func (s *Service) ProcessSync(ctx context.Context, req domain.SyncEventRequest, 
 
 	// ── Daily streak entries ──────────────────────────────────────────────────
 	for _, date := range streakDates {
-		_ = qtx.UpsertDailyStreak(ctx, repository.UpsertDailyStreakParams{
+		if err := qtx.UpsertDailyStreak(ctx, repository.UpsertDailyStreakParams{
 			UserID:       req.UserID,
 			ActivityDate: date,
-		})
+		}); err != nil {
+			return domain.SyncEventResponse{}, fmt.Errorf("upserting daily streak: %w", err)
+		}
 	}
 
-	_ = qtx.UpdateSyncEventStatus(ctx, repository.UpdateSyncEventStatusParams{
+	if err := qtx.UpdateSyncEventStatus(ctx, repository.UpdateSyncEventStatusParams{
 		ID:     req.SyncEventID,
 		Status: "processed",
-	})
-	_ = qtx.TouchDevice(ctx, req.DeviceID)
+	}); err != nil {
+		return domain.SyncEventResponse{}, fmt.Errorf("updating sync event status: %w", err)
+	}
+	
+	if err := qtx.TouchDevice(ctx, req.DeviceID); err != nil {
+		return domain.SyncEventResponse{}, fmt.Errorf("touching device: %w", err)
+	}
 	totals, err := qtx.GetUserProgressTotals(ctx, req.UserID)
 	if err != nil {
 		return domain.SyncEventResponse{}, err
@@ -338,12 +345,8 @@ func isDuplicateKey(err error) bool {
 
 func containsAny(s string, substrings ...string) bool {
 	for _, sub := range substrings {
-		if len(s) >= len(sub) {
-			for i := 0; i <= len(s)-len(sub); i++ {
-				if s[i:i+len(sub)] == sub {
-					return true
-				}
-			}
+		if strings.Contains(s, sub) {
+			return true
 		}
 	}
 	return false

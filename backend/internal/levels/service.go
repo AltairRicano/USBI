@@ -68,7 +68,15 @@ func (s *Service) CreateLevel(ctx context.Context, adminID uuid.UUID, req Create
 	}
 	resp := levelToResponse(level)
 
-	if err := logAdminAudit(ctx, qtx, adminID, "level.create", "level", level.ID, nil, levelAuditPayload(resp)); err != nil {
+	if err := logAdminAudit(ctx, AuditParams{
+		Repo:        qtx,
+		ActorID:     adminID,
+		Action:      "level.create",
+		EntityType:  "level",
+		EntityID:    level.ID,
+		BeforeState: nil,
+		AfterState:  levelAuditPayload(resp),
+	}); err != nil {
 		return LevelResponse{}, err
 	}
 	if err := tx.Commit(); err != nil {
@@ -107,7 +115,15 @@ func (s *Service) UpdateLevel(ctx context.Context, adminID, levelID uuid.UUID, r
 		return LevelResponse{}, err
 	}
 	resp := levelToResponse(level)
-	if err := logAdminAudit(ctx, qtx, adminID, "level.update", "level", level.ID, nil, levelAuditPayload(resp)); err != nil {
+	if err := logAdminAudit(ctx, AuditParams{
+		Repo:        qtx,
+		ActorID:     adminID,
+		Action:      "level.update",
+		EntityType:  "level",
+		EntityID:    level.ID,
+		BeforeState: nil,
+		AfterState:  levelAuditPayload(resp),
+	}); err != nil {
 		return LevelResponse{}, err
 	}
 	if err := tx.Commit(); err != nil {
@@ -135,7 +151,15 @@ func (s *Service) PublishLevel(ctx context.Context, adminID, levelID uuid.UUID) 
 		return LevelResponse{}, err
 	}
 	resp := levelToResponse(level)
-	if err := logAdminAudit(ctx, qtx, adminID, "level.publish", "level", level.ID, nil, levelAuditPayload(resp)); err != nil {
+	if err := logAdminAudit(ctx, AuditParams{
+		Repo:        qtx,
+		ActorID:     adminID,
+		Action:      "level.publish",
+		EntityType:  "level",
+		EntityID:    level.ID,
+		BeforeState: nil,
+		AfterState:  levelAuditPayload(resp),
+	}); err != nil {
 		return LevelResponse{}, err
 	}
 	if err := tx.Commit(); err != nil {
@@ -163,7 +187,15 @@ func (s *Service) UnpublishLevel(ctx context.Context, adminID, levelID uuid.UUID
 		return LevelResponse{}, err
 	}
 	resp := levelToResponse(level)
-	if err := logAdminAudit(ctx, qtx, adminID, "level.unpublish", "level", level.ID, nil, levelAuditPayload(resp)); err != nil {
+	if err := logAdminAudit(ctx, AuditParams{
+		Repo:        qtx,
+		ActorID:     adminID,
+		Action:      "level.unpublish",
+		EntityType:  "level",
+		EntityID:    level.ID,
+		BeforeState: nil,
+		AfterState:  levelAuditPayload(resp),
+	}); err != nil {
 		return LevelResponse{}, err
 	}
 	if err := tx.Commit(); err != nil {
@@ -194,7 +226,15 @@ func (s *Service) ArchiveLevel(ctx context.Context, adminID, levelID uuid.UUID) 
 		return LevelResponse{}, err
 	}
 	resp := levelToResponse(level)
-	if err := logAdminAudit(ctx, qtx, adminID, "level.archive", "level", level.ID, nil, levelAuditPayload(resp)); err != nil {
+	if err := logAdminAudit(ctx, AuditParams{
+		Repo:        qtx,
+		ActorID:     adminID,
+		Action:      "level.archive",
+		EntityType:  "level",
+		EntityID:    level.ID,
+		BeforeState: nil,
+		AfterState:  levelAuditPayload(resp),
+	}); err != nil {
 		return LevelResponse{}, err
 	}
 	if err := tx.Commit(); err != nil {
@@ -230,7 +270,7 @@ func (s *Service) ListLevels(ctx context.Context, cursor uuid.UUID, sectionID uu
 		HasSectionID:       sectionID != uuid.Nil,
 		SectionID:          sectionID,
 		Cursor:             cursor,
-		PageSize:           pageSize,
+		PageSize:           pageSize + 1,
 	})
 	if err != nil {
 		return LevelsPage{}, err
@@ -250,11 +290,12 @@ func (s *Service) ListLevels(ctx context.Context, cursor uuid.UUID, sectionID uu
 		})
 	}
 
-	page := LevelsPage{Items: items}
-	if len(items) == int(pageSize) {
-		// There may be more pages — return the last ID as cursor.
-		page.NextCursor = items[len(items)-1].ID.String()
+	page := LevelsPage{}
+	if len(items) > int(pageSize) {
+		items = items[:pageSize]
+		page.NextCursor = items[pageSize-1].ID.String()
 	}
+	page.Items = items
 
 	return page, nil
 }
@@ -282,7 +323,15 @@ func (s *Service) CreateSection(ctx context.Context, adminID uuid.UUID, req Crea
 		return SectionResponse{}, err
 	}
 	resp := sectionToResponse(section)
-	if err := logAdminAudit(ctx, qtx, adminID, "section.create", "section", section.ID, nil, resp); err != nil {
+	if err := logAdminAudit(ctx, AuditParams{
+		Repo:        qtx,
+		ActorID:     adminID,
+		Action:      "section.create",
+		EntityType:  "section",
+		EntityID:    section.ID,
+		BeforeState: nil,
+		AfterState:  resp,
+	}); err != nil {
 		return SectionResponse{}, err
 	}
 	if err := tx.Commit(); err != nil {
@@ -327,7 +376,15 @@ func (s *Service) UpdateSection(ctx context.Context, adminID, sectionID uuid.UUI
 		return SectionResponse{}, err
 	}
 	resp := sectionToResponse(section)
-	if err := logAdminAudit(ctx, qtx, adminID, "section.update", "section", section.ID, nil, resp); err != nil {
+	if err := logAdminAudit(ctx, AuditParams{
+		Repo:        qtx,
+		ActorID:     adminID,
+		Action:      "section.update",
+		EntityType:  "section",
+		EntityID:    section.ID,
+		BeforeState: nil,
+		AfterState:  resp,
+	}); err != nil {
 		return SectionResponse{}, err
 	}
 	if err := tx.Commit(); err != nil {
@@ -355,7 +412,15 @@ func (s *Service) PublishSection(ctx context.Context, adminID, sectionID uuid.UU
 		return SectionResponse{}, err
 	}
 	resp := sectionToResponse(section)
-	if err := logAdminAudit(ctx, qtx, adminID, "section.publish", "section", section.ID, nil, resp); err != nil {
+	if err := logAdminAudit(ctx, AuditParams{
+		Repo:        qtx,
+		ActorID:     adminID,
+		Action:      "section.publish",
+		EntityType:  "section",
+		EntityID:    section.ID,
+		BeforeState: nil,
+		AfterState:  resp,
+	}); err != nil {
 		return SectionResponse{}, err
 	}
 	if err := tx.Commit(); err != nil {
@@ -383,7 +448,15 @@ func (s *Service) UnpublishSection(ctx context.Context, adminID, sectionID uuid.
 		return SectionResponse{}, err
 	}
 	resp := sectionToResponse(section)
-	if err := logAdminAudit(ctx, qtx, adminID, "section.unpublish", "section", section.ID, nil, resp); err != nil {
+	if err := logAdminAudit(ctx, AuditParams{
+		Repo:        qtx,
+		ActorID:     adminID,
+		Action:      "section.unpublish",
+		EntityType:  "section",
+		EntityID:    section.ID,
+		BeforeState: nil,
+		AfterState:  resp,
+	}); err != nil {
 		return SectionResponse{}, err
 	}
 	if err := tx.Commit(); err != nil {
@@ -420,7 +493,15 @@ func (s *Service) ArchiveSection(ctx context.Context, adminID, sectionID uuid.UU
 	}
 
 	resp := sectionToResponse(section)
-	if err := logAdminAudit(ctx, qtx, adminID, "section.archive", "section", section.ID, nil, resp); err != nil {
+	if err := logAdminAudit(ctx, AuditParams{
+		Repo:        qtx,
+		ActorID:     adminID,
+		Action:      "section.archive",
+		EntityType:  "section",
+		EntityID:    section.ID,
+		BeforeState: nil,
+		AfterState:  resp,
+	}); err != nil {
 		return SectionResponse{}, err
 	}
 	if err := tx.Commit(); err != nil {
@@ -1131,17 +1212,27 @@ func isHTTPURL(rawURL string) bool {
 	return (parsed.Scheme == "http" || parsed.Scheme == "https") && parsed.Host != ""
 }
 
+type AuditParams struct {
+	Repo        *repository.Queries
+	ActorID     uuid.UUID
+	Action      string
+	EntityType  string
+	EntityID    uuid.UUID
+	BeforeState any
+	AfterState  any
+}
+
 // logAdminAudit is a thin wrapper over the shared audit package, kept so the
 // 10 existing call sites in this file stay unchanged. Content admin actions have
 // no per-request IP/user-agent here, so audit.Log fills its placeholders.
-func logAdminAudit(ctx context.Context, repo *repository.Queries, actorID uuid.UUID, action, entityType string, entityID uuid.UUID, beforeState, afterState any) error {
-	return audit.Log(ctx, repo, audit.Entry{
-		ActorID:    actorID,
-		Action:     action,
-		EntityType: entityType,
-		EntityID:   entityID,
-		Before:     beforeState,
-		After:      afterState,
+func logAdminAudit(ctx context.Context, params AuditParams) error {
+	return audit.Log(ctx, params.Repo, audit.Entry{
+		ActorID:    params.ActorID,
+		Action:     params.Action,
+		EntityType: params.EntityType,
+		EntityID:   params.EntityID,
+		Before:     params.BeforeState,
+		After:      params.AfterState,
 	})
 }
 

@@ -1,5 +1,6 @@
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { describe, it, expect, vi } from 'vitest';
+import { MemoryRouter } from 'react-router-dom';
 import { MakerPage } from './MakerPage';
 
 // Mock Tauri APIs
@@ -13,7 +14,11 @@ vi.mock('@tauri-apps/plugin-fs', () => ({
 
 describe('MakerPage', () => {
   it('renders the metadata form with correct labels', () => {
-    render(<MakerPage />);
+    render(
+      <MemoryRouter>
+        <MakerPage />
+      </MemoryRouter>
+    );
 
     expect(screen.getByText('Maker — Creación de Niveles')).toBeDefined();
     expect(screen.getByLabelText('Título')).toBeDefined();
@@ -24,7 +29,11 @@ describe('MakerPage', () => {
   });
 
   it('shows Zod validation errors when submitting empty metadata', async () => {
-    render(<MakerPage />);
+    render(
+      <MemoryRouter>
+        <MakerPage />
+      </MemoryRouter>
+    );
 
     // Clear the title field specifically — title has min(1) in schema.
     const titleInput = screen.getByLabelText('Título');
@@ -38,12 +47,20 @@ describe('MakerPage', () => {
   });
 
   it('renders Trivia sub-editor by default', () => {
-    render(<MakerPage />);
+    render(
+      <MemoryRouter>
+        <MakerPage />
+      </MemoryRouter>
+    );
     expect(screen.getByPlaceholderText('¿Cuál es...?')).toBeDefined();
   });
 
   it('exports successfully when form is filled correctly', async () => {
-    render(<MakerPage />);
+    render(
+      <MemoryRouter>
+        <MakerPage />
+      </MemoryRouter>
+    );
 
     fireEvent.change(screen.getByLabelText('Título'), { target: { value: 'Mi Nivel de Prueba' } });
     fireEvent.change(screen.getByLabelText('Autor'), { target: { value: 'Profe UV' } });

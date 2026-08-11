@@ -445,11 +445,7 @@ func (s *Service) SubmitTutorConsent(ctx context.Context, req TutorConsentReques
 	// else's minor account under their own claimed identity. On mismatch
 	// we no-op identically to the unknown-account branch above, so this
 	// stays indistinguishable from the outside (no enumeration oracle).
-	presentedMAC, decodeErr := base64.RawURLEncoding.DecodeString(req.RegistrationToken)
-	if decodeErr != nil {
-		return nil
-	}
-	if !crypto.VerifyHMAC([]byte("tutor-consent-registration|"+req.UserID.String()), presentedMAC, s.cfg.HMACSecret) {
+	if !s.verifyRegistrationToken(req.RegistrationToken, req.UserID) {
 		return nil
 	}
 
@@ -460,44 +456,11 @@ func (s *Service) SubmitTutorConsent(ctx context.Context, req TutorConsentReques
 	tokenHash := crypto.GenerateHMAC([]byte(rawToken), s.cfg.HMACSecret)
 	expiresAt := time.Now().UTC().Add(s.tutorConsentTokenTTL)
 
-	tx, err := s.queries.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelSerializable})
-	if err != nil {
+	if err := s.storeTutorConsentToken(ctx, req, requestedIP, userAgent, tokenHash, expiresAt); err != nil {
 		return err
 	}
-	defer func() { _ = tx.Rollback() }()
-	qtx := s.queries.WithTx(tx)
 
-	if err := qtx.DeleteUnverifiedTutorConsentTokensForUser(ctx, req.UserID); err != nil {
-		return fmt.Errorf("clearing previous tutor consent tokens: %w", err)
-	}
-	if err := qtx.InsertTutorConsentToken(ctx, repository.InsertTutorConsentTokenParams{
-		ID:                   uuid.New(),
-		UserID:               req.UserID,
-		TutorName:            strings.TrimSpace(req.TutorName),
-		TutorEmail:           strings.ToLower(strings.TrimSpace(req.TutorEmail)),
-		PrivacyNoticeVersion: req.PrivacyNoticeVersion,
-		TokenHash:            tokenHash,
-		RequestedIP:          requestedIP,
-		RequestedUserAgent:   userAgent,
-		CryptoKeyVersion:     1,
-		ExpiresAt:            expiresAt,
-		EncryptionKey:        s.cfg.EncryptionKey,
-	}); err != nil {
-		return fmt.Errorf("inserting tutor consent token: %w", err)
-	}
-	if err := tx.Commit(); err != nil {
-		return fmt.Errorf("committing tutor consent token: %w", err)
-	}
-
-	// Email is sent AFTER commit — never do network I/O inside a DB transaction.
-	tutorEmail := strings.ToLower(strings.TrimSpace(req.TutorEmail))
-	link := s.tutorConsentVerifyURL + "?token=" + rawToken
-	subject := "Verificación de consentimiento — Plataforma USBI"
-	body := buildTutorConsentEmail(strings.TrimSpace(req.TutorName), link, s.tutorConsentTokenTTL)
-	if err := s.mailer.Send(ctx, tutorEmail, subject, body); err != nil {
-		return fmt.Errorf("%w: %v", ErrMailSend, err)
-	}
-	return nil
+	return s.sendTutorVerificationEmail(ctx, req.TutorName, req.TutorEmail, rawToken)
 }
 
 // VerifyTutorConsent completes the tutor double opt-in. It validates the token
@@ -513,59 +476,7 @@ func (s *Service) VerifyTutorConsent(ctx context.Context, rawToken string, click
 	}
 	tokenHash := crypto.GenerateHMAC([]byte(rawToken), s.cfg.HMACSecret)
 
-	tx, err := s.queries.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelSerializable})
-	if err != nil {
-		return err
-	}
-	defer func() { _ = tx.Rollback() }()
-	qtx := s.queries.WithTx(tx)
-
-	row, err := qtx.GetTutorConsentTokenByHashForUpdate(ctx, tokenHash, s.cfg.EncryptionKey)
-	if err != nil {
-		if repository.IsNoRows(err) {
-			return ErrTutorTokenInvalid
-		}
-		return fmt.Errorf("looking up tutor consent token: %w", err)
-	}
-	if row.VerifiedAt.Valid {
-		return ErrTutorTokenUsed
-	}
-	if time.Now().UTC().After(row.ExpiresAt) {
-		return ErrTutorTokenExpired
-	}
-
-	tutorEmail := strings.ToLower(strings.TrimSpace(row.TutorEmail))
-	signaturePayload := []byte(row.UserID.String() + "|" + tutorEmail + "|" + row.PrivacyNoticeVersion)
-	signature := crypto.GenerateHMAC(signaturePayload, s.cfg.HMACSecret)
-	now := time.Now().UTC()
-
-	if err := qtx.InsertTutorConsent(ctx, repository.InsertTutorConsentParams{
-		ID:                   uuid.New(),
-		UserID:               row.UserID,
-		TutorName:            strings.TrimSpace(row.TutorName),
-		TutorEmail:           tutorEmail,
-		PrivacyNoticeVersion: row.PrivacyNoticeVersion,
-		AcceptedAt:           now,
-		AcceptanceIP:         clickIP,
-		AcceptanceUserAgent:  userAgent,
-		ConsentSignature:     signature,
-		CryptoKeyVersion:     1,
-		EncryptionKey:        s.cfg.EncryptionKey,
-	}); err != nil {
-		return fmt.Errorf("inserting tutor consent: %w", err)
-	}
-	if err := qtx.MarkTutorConsentTokenVerified(ctx, repository.MarkTutorConsentTokenVerifiedParams{
-		ID:                    row.ID,
-		VerifiedAt:            now,
-		VerificationIP:        clickIP,
-		VerificationUserAgent: userAgent,
-	}); err != nil {
-		return fmt.Errorf("marking tutor consent token verified: %w", err)
-	}
-	if err := qtx.ActivateTutorConsentUser(ctx, row.UserID); err != nil {
-		return fmt.Errorf("activating tutor consent user: %w", err)
-	}
-	return tx.Commit()
+	return s.processTutorConsentVerification(ctx, tokenHash, clickIP, userAgent)
 }
 
 // buildTutorConsentEmail renders the Spanish plain-text verification email.
@@ -845,4 +756,113 @@ func validateTutorConsent(req TutorConsentRequest) error {
 		return errors.New(strings.Join(errs, "; "))
 	}
 	return nil
+}
+
+// ── Private helpers for tutor consent to improve functional cohesion ──────────
+
+func (s *Service) verifyRegistrationToken(registrationToken string, userID uuid.UUID) bool {
+	presentedMAC, decodeErr := base64.RawURLEncoding.DecodeString(registrationToken)
+	if decodeErr != nil {
+		return false
+	}
+	return crypto.VerifyHMAC([]byte("tutor-consent-registration|"+userID.String()), presentedMAC, s.cfg.HMACSecret)
+}
+
+func (s *Service) storeTutorConsentToken(ctx context.Context, req TutorConsentRequest, requestedIP net.IP, userAgent string, tokenHash []byte, expiresAt time.Time) error {
+	tx, err := s.queries.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelSerializable})
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+	qtx := s.queries.WithTx(tx)
+
+	if err := qtx.DeleteUnverifiedTutorConsentTokensForUser(ctx, req.UserID); err != nil {
+		return fmt.Errorf("clearing previous tutor consent tokens: %w", err)
+	}
+	if err := qtx.InsertTutorConsentToken(ctx, repository.InsertTutorConsentTokenParams{
+		ID:                   uuid.New(),
+		UserID:               req.UserID,
+		TutorName:            strings.TrimSpace(req.TutorName),
+		TutorEmail:           strings.ToLower(strings.TrimSpace(req.TutorEmail)),
+		PrivacyNoticeVersion: req.PrivacyNoticeVersion,
+		TokenHash:            tokenHash,
+		RequestedIP:          requestedIP,
+		RequestedUserAgent:   userAgent,
+		CryptoKeyVersion:     1,
+		ExpiresAt:            expiresAt,
+		EncryptionKey:        s.cfg.EncryptionKey,
+	}); err != nil {
+		return fmt.Errorf("inserting tutor consent token: %w", err)
+	}
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("committing tutor consent token: %w", err)
+	}
+	return nil
+}
+
+func (s *Service) sendTutorVerificationEmail(ctx context.Context, tutorName, tutorEmail, rawToken string) error {
+	tutorEmail = strings.ToLower(strings.TrimSpace(tutorEmail))
+	link := s.tutorConsentVerifyURL + "?token=" + rawToken
+	subject := "Verificación de consentimiento — Plataforma USBI"
+	body := buildTutorConsentEmail(strings.TrimSpace(tutorName), link, s.tutorConsentTokenTTL)
+	if err := s.mailer.Send(ctx, tutorEmail, subject, body); err != nil {
+		return fmt.Errorf("%w: %v", ErrMailSend, err)
+	}
+	return nil
+}
+
+func (s *Service) processTutorConsentVerification(ctx context.Context, tokenHash []byte, clickIP net.IP, userAgent string) error {
+	tx, err := s.queries.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelSerializable})
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+	qtx := s.queries.WithTx(tx)
+
+	row, err := qtx.GetTutorConsentTokenByHashForUpdate(ctx, tokenHash, s.cfg.EncryptionKey)
+	if err != nil {
+		if repository.IsNoRows(err) {
+			return ErrTutorTokenInvalid
+		}
+		return fmt.Errorf("looking up tutor consent token: %w", err)
+	}
+	if row.VerifiedAt.Valid {
+		return ErrTutorTokenUsed
+	}
+	if time.Now().UTC().After(row.ExpiresAt) {
+		return ErrTutorTokenExpired
+	}
+
+	tutorEmail := strings.ToLower(strings.TrimSpace(row.TutorEmail))
+	signaturePayload := []byte(row.UserID.String() + "|" + tutorEmail + "|" + row.PrivacyNoticeVersion)
+	signature := crypto.GenerateHMAC(signaturePayload, s.cfg.HMACSecret)
+	now := time.Now().UTC()
+
+	if err := qtx.InsertTutorConsent(ctx, repository.InsertTutorConsentParams{
+		ID:                   uuid.New(),
+		UserID:               row.UserID,
+		TutorName:            strings.TrimSpace(row.TutorName),
+		TutorEmail:           tutorEmail,
+		PrivacyNoticeVersion: row.PrivacyNoticeVersion,
+		AcceptedAt:           now,
+		AcceptanceIP:         clickIP,
+		AcceptanceUserAgent:  userAgent,
+		ConsentSignature:     signature,
+		CryptoKeyVersion:     1,
+		EncryptionKey:        s.cfg.EncryptionKey,
+	}); err != nil {
+		return fmt.Errorf("inserting tutor consent: %w", err)
+	}
+	if err := qtx.MarkTutorConsentTokenVerified(ctx, repository.MarkTutorConsentTokenVerifiedParams{
+		ID:                    row.ID,
+		VerifiedAt:            now,
+		VerificationIP:        clickIP,
+		VerificationUserAgent: userAgent,
+	}); err != nil {
+		return fmt.Errorf("marking tutor consent token verified: %w", err)
+	}
+	if err := qtx.ActivateTutorConsentUser(ctx, row.UserID); err != nil {
+		return fmt.Errorf("activating tutor consent user: %w", err)
+	}
+	return tx.Commit()
 }
